@@ -1,0 +1,571 @@
+@WMS.API_HostAddress = https://localhost:7100
+
+GET {{WMS.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+### Get all warehouses
+GET https://localhost:7100/api/warehouses
+Accept: application/json
+
+### Create a warehouse
+POST https://localhost:7100/api/warehouses
+Content-Type: application/json
+
+### Create your first warehouse
+POST https://localhost:7100/api/warehouses
+Content-Type: application/json
+
+{
+    "warehouseCode": "WH001",
+    "warehouseName": "Main Warehouse",
+    "city": "Antipolo",
+    "address": "Rizal, Philippines"
+}
+
+### Update warehouse
+PUT https://localhost:7100/api/warehouses/1
+Content-Type: application/json
+
+{
+    "warehouseName": "Main Distribution Warehouse",
+    "city": "Binangonan",
+    "address": "Rizal, Philippines"
+}
+
+### Deactivate warehouse
+PATCH https://localhost:7100/api/warehouses/1/deactivate
+
+### Get all zones
+GET https://localhost:7100/api/warehouses/1/zones
+
+### Create Raw Materials zone
+POST https://localhost:7100/api/warehouses/1/zones
+Content-Type: application/json
+
+{
+    "zoneCode": "RM-A",
+    "zoneName": "Raw Materials"
+}
+
+### Get zone by ID
+GET https://localhost:7100/api/warehouses/1/zones/1
+
+### Update zone
+PUT https://localhost:7100/api/warehouses/1/zones/1
+Content-Type: application/json
+
+{
+    "zoneName": "Raw Materials Storage"
+}
+
+### Get all bins
+GET https://localhost:7100/api/warehouses/1/zones/2/bins
+
+### Create a storage bin
+POST https://localhost:7100/api/warehouses/1/zones/1/bins
+Content-Type: application/json
+
+{
+    "binCode": "A-01-01",
+    "binType": "RACK"
+}
+
+### Create another storage bin
+POST https://localhost:7100/api/warehouses/1/zones/2/bins
+Content-Type: application/json
+
+{
+    "binCode": "A-01-02",
+    "binType": "RACK"
+}
+
+### Get one bin
+GET https://localhost:7100/api/warehouses/1/zones/2/bins/1
+
+### Update a bin
+PUT https://localhost:7100/api/warehouses/1/zones/2/bins/1
+Content-Type: application/json
+
+{
+    "binType": "SHELF",
+    "isActive": true
+}
+
+### Get all categories
+GET https://localhost:7100/api/item-categories
+
+### Create Raw Materials
+POST https://localhost:7100/api/item-categories
+Content-Type: application/json
+
+{
+    "categoryCode": "RM",
+    "categoryName": "Raw Materials",
+    "description": "Materials used in manufacturing."
+}
+
+### Create Finished Goods
+POST https://localhost:7100/api/item-categories
+Content-Type: application/json
+
+{
+    "categoryCode": "FG",
+    "categoryName": "Finished Goods",
+    "description": "Completed products ready for storage or distribution."
+}
+
+### Update a Category
+PUT https://localhost:7100/api/item-categories/1
+Content-Type: application/json
+
+{
+    "categoryName": "Raw Materials and Ingredients",
+    "description": "Ingredients and materials used in production."
+}
+
+### Deactivate a Category
+PATCH https://localhost:7100/api/item-categories/1/deactivate
+
+
+### Get all items
+GET https://localhost:7100/api/items
+
+### Retrieve item with ID 1
+GET https://localhost:7100/api/items/1
+
+### Create a new item
+POST https://localhost:7100/api/items
+Content-Type: application/json
+
+{
+    "itemCode": "MI000012",
+    "itemName": "BRINE 23 BAUME",
+    "description": "Sample ingredient",
+    "categoryId": 2,
+    "baseUomId": 1,
+    "stockRotationMethod": "FIFO",
+    "requiresExpiry": true,
+    "requiresQualityInspection": false,
+    "reorderLevel": 100
+}
+
+### Update item with ID 1
+PUT https://localhost:7100/api/items/1
+Content-Type: application/json
+
+{
+    "itemName": "UPDATED BRINE 23 BAUME",
+    "description": "Updated sample ingredient",
+    "categoryId": 2,
+    "baseUomId": 1,
+    "stockRotationMethod": "FIFO",
+    "requiresExpiry": true,
+    "requiresQualityInspection": false,
+    "reorderLevel": 150
+}
+
+### Deactivate item with ID 1
+PATCH https://localhost:7100/api/items/1/deactivate
+
+
+
+
+### Get all UOMs
+GET https://localhost:7100/api/units-of-measure
+
+### Get UOM by ID
+GET https://localhost:7100/api/units-of-measure/1
+
+### Create UOM
+POST https://localhost:7100/api/units-of-measure
+Content-Type: application/json
+
+{
+    "uomCode": "BOX",
+    "uomName": "Box",
+    "unitType": "COUNT"
+}
+
+### Update UOM
+PUT https://localhost:7100/api/units-of-measure/1
+Content-Type: application/json
+
+{
+    "uomCode": "KG",
+    "uomName": "Kilogram",
+    "unitType": "WEIGHT"
+}
+
+### Deactivate UOM
+PATCH https://localhost:7100/api/units-of-measure/1/deactivate
+
+
+
+### Get all item barcodes
+GET https://localhost:7100/api/item-barcodes
+
+### Get barcode by ID
+GET https://localhost:7100/api/item-barcodes/1
+
+### Scan barcode
+GET https://localhost:7100/api/item-barcodes/4800000000012
+
+### Register a barcode
+POST https://localhost:7100/api/item-barcodes
+Content-Type: application/json
+
+{
+    "itemId": 1,
+    "barcodeValue": "4800000000012",
+    "barcodeType": "CODE128",
+    "isPrimary": true
+}
+
+### Deactivate barcode
+PATCH https://localhost:7100/api/item-barcodes/1/deactivate
+
+
+
+### Get all inventory lots
+GET https://localhost:7100/api/inventory-lots
+
+### Get inventory lot by ID
+GET https://localhost:7100/api/inventory-lots/1
+
+### Get lots by item ID
+GET https://localhost:7100/api/inventory-lots/item/1
+
+### Register inventory lot
+POST https://localhost:7100/api/inventory-lots
+Content-Type: application/json
+
+{
+    "itemId": 1,
+    "batchCode": "BATCH-2026-001",
+    "supplierBatchCode": "SUP-001",
+    "manufactureDate": "2026-10-01",
+    "expiryDate": "2027-10-01",
+    "receivedDate": "2026-11-16",
+    "qualityStatus": "QUARANTINED",
+    "notes": "Sample inventory lot"
+}
+
+
+### Get all inventory balances
+GET https://localhost:7100/api/inventory-balances
+
+### Get inventory balance by ID
+GET https://localhost:7100/api/inventory-balances/3
+
+### Get balances by item ID
+GET https://localhost:7100/api/inventory-balances/item/1
+
+### Get balances by storage bin ID
+GET https://localhost:7100/api/inventory-balances/bin/1
+
+
+
+### Get all goods receipts
+GET https://localhost:7100/api/goods-receipts
+
+### Get receipt by ID
+GET https://localhost:7100/api/goods-receipts/1
+
+### Create goods receipt
+POST https://localhost:7100/api/goods-receipts
+Content-Type: application/json
+
+{
+  "receiptNumber": "GR-2026-0001",
+  "purchaseOrderId": null,
+  "warehouseId": 1,
+  "receiptDate": "2026-11-16T08:00:00+08:00",
+  "deliveryReference": "DEL-001",
+  "receivedBy": null,
+  "lines": [
+    {
+      "itemId": 1,
+      "lotId": 3,
+      "receivedQuantity": 600,
+      "uomId": 1,
+      "inspectionStatus": "PENDING",
+      "poLineId": null
+    }
+  ]
+}
+
+
+
+### Get all putaway tasks
+GET https://localhost:7100/api/putaway-tasks
+
+### Get putaway task by ID
+GET https://localhost:7100/api/putaway-tasks/1
+
+### Create putaway task
+POST https://localhost:7100/api/putaway-tasks
+Content-Type: application/json
+
+{
+  "receiptLineId": 1,
+  "lotId": 3,
+  "fromBinId": null,
+  "toBinId": 1,
+  "quantity": 600,
+  "assignedTo": null
+}
+
+
+### GET all stock transfers
+GET https://localhost:7100/api/stock-transfers
+
+### GET stock transfer by ID
+GET https://localhost:7100/api/stock-transfers/1
+
+### POST create stock transfer
+POST https://localhost:7100/api/stock-transfers
+Content-Type: application/json
+
+{
+    "transferNumber": "TR-2026-0001",
+    "sourceWarehouseId": 1,
+    "destinationWarehouseId": 2,
+    "requestedBy": null,
+    "lines": [
+        {
+            "lotId": 3,
+            "sourceBinId": 1,
+            "requestedQuantity": 100,
+            "uomId": 1
+        }
+    ]
+}
+
+
+### Create stock transfer
+POST https://localhost:7100/api/stock-transfers
+Content-Type: application/json
+
+{
+    "transferNumber": "TR-2026-0002",
+    "sourceWarehouseId": 1,
+    "destinationWarehouseId": 2,
+    "requestedBy": null,
+    "lines": [
+        {
+            "lotId": 3,
+            "sourceBinId": 1,
+            "requestedQuantity": 100,
+            "uomId": 1
+        }
+    ]
+}
+
+
+### Check if WH Transit is available
+GET http://localhost:5191/api/warehouses
+
+### Create the transfer
+POST http://localhost:5191/api/stock-transfers
+Content-Type: application/json
+
+{
+  "transferNumber": "TR-2026-TEST-001",
+  "sourceWarehouseId": 1,
+  "destinationWarehouseId": 2,
+  "lines": [
+    {
+      "lotId": 4,
+      "sourceBinId": 1,
+      "requestedQuantity": 100,
+      "uomId": 1
+    }
+  ]
+}
+
+#### Get all stock transfers
+GET http://localhost:5191/api/stock-transfers
+
+
+#### Dispatch the transfer
+POST http://localhost:5191/api/stock-transfers/3/dispatch
+Content-Type: application/json
+{
+  "lines": [
+    {
+      "transferLineId": 3,
+      "dispatchedQuantity": 100
+    }
+  ]
+}
+
+###Create a WH zone
+POST http://localhost:5191/api/warehouses/2/zones
+Content-Type: application/json
+{
+  "zoneCode": "RM-01",
+  "zoneName": "Raw Materials Storage"
+}
+
+###Create storage bin
+POST http://localhost:5191/api/warehouses/2/zones/2/bins
+Content-Type: application/json
+{
+  "binCode": "A-01-01",
+  "binType": "RACK"
+}
+
+###Receive the transfer
+POST http://localhost:5191/api/stock-transfers/3/receive
+Content-Type: application/json
+{
+  "receivedBy": null,
+  "lines": [
+    {
+      "transferLineId": 3,
+      "destinationBinId": 2,
+      "receivedQuantity": 100,
+      "discrepancyReason": null
+    }
+  ]
+}
+
+
+### 
+POST https://localhost:7100/api/stock-adjustments
+Content-Type: application/json
+{
+  "adjustmentNumber": "ADJ-2026-0001",
+  "warehouseId": 2,
+  "adjustmentReason": "Physical inventory count discrepancy",
+  "createdBy": null
+}
+### 
+POST https://localhost:7100/api/stock-adjustments/1/lines
+Content-Type: application/json
+{
+  "lotId": 4,
+  "binId": 2,
+  "countedQuantity": 95
+}
+
+###---------
+GET https://localhost:7100/api/stock-adjustments/1
+
+###
+POST https://localhost:7100/api/stock-adjustments/1/post
+Content-Type:application/json
+{
+  "postedBy": null
+}
+
+###
+POST https://localhost:7100/api/stock-adjustments
+Content-Type:application/json
+{
+  "adjustmentNumber": "ADJ-2026-0002",
+  "warehouseId": 2,
+  "adjustmentReason": "Adjustment line update test",
+  "createdBy": null
+}
+
+###
+POST https://localhost:7100/api/stock-adjustments/2/lines
+Content-Type:application/json
+{
+  "lotId": 4,
+  "binId": 2,
+  "countedQuantity": 90
+}
+
+###
+PUT https://localhost:7100/api/stock-adjustments/2/lines/2
+Content-Type:application/json
+{
+  "lotId": 4,
+  "binId": 2,
+  "countedQuantity": 92
+}
+
+
+###Create Stock Count
+POST https://localhost:7100/api/stock-counts
+Content-Type:application/json
+{
+  "countNumber": "SC-2026-0001",
+  "warehouseId": 2,
+  "countDate": "2026-11-17T08:00:00",
+  "createdBy": null
+}
+
+###Get Stock Count
+GET https://localhost:7100/api/stock-counts/1
+
+###Record Physical Count
+PUT https://localhost:7100/api/stock-counts/1/lines/1
+Content-Type:application/json
+{
+  "countedQuantity": 92,
+  "countedBy": null
+}
+
+###Add Stock Count Line
+POST https://localhost:7100/api/stock-counts/1/lines
+Content-Type:application/json
+{
+  "lotId": 4,
+  "binId": 2
+}
+
+###Complete Stock Count
+POST https://localhost:7100/api/stock-counts/1/complete
+
+
+###
+POST https://localhost:7100/api/stock-counts/1/post
+Content-Type:application/json
+{
+  "postedBy": null
+}
+
+###
+GET https://localhost:7100/api/stock-counts/1
+
+
+#### 
+GET http://localhost:5191/api/quality-parameters
+#### 
+GET http://localhost:5191/api/quality-parameters/1
+#### 
+POST http://localhost:5191/api/quality-parameters
+Content-Type:application/json
+{
+  "parameterCode": "PH",
+  "parameterName": "pH Level",
+  "description": "Measures the acidity or alkalinity of a material.",
+  "unitOfMeasure": "pH"
+}
+#### 
+PUT http://localhost:5191/api/quality-parameters/1
+Content-Type:application/json
+{
+  "parameterCode": "PH",
+  "parameterName": "pH Level Updated",
+  "description": "Updated description for pH measurement.",
+  "unitOfMeasure": "pH"
+}
+
+#### 
+GET http://localhost:5191/api/production-material-issues/1
+
+###
+POST http://localhost:5191/api/production-wastes
+Content-Type:application/json
+{
+  "productionOrderId": 1,
+  "lotId": 4,
+  "wastedQuantity": 5,
+  "uomId": 1,
+  "wasteReason": "TEST - Production material spillage",
+  "recordedBy": null
+}
