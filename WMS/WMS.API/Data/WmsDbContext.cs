@@ -383,6 +383,15 @@ public partial class WmsDbContext : DbContext
                 .HasColumnName("inspection_status");
             entity.Property(e => e.ItemId).HasColumnName("item_id");
             entity.Property(e => e.LotId).HasColumnName("lot_id");
+
+            entity.Property(e => e.ReceivingBinId)
+                .HasColumnName("receiving_bin_id");
+
+                        entity.HasOne<StorageBin>()
+                            .WithMany()
+                            .HasForeignKey(e => e.ReceivingBinId)
+                            .HasConstraintName("goods_receipt_lines_receiving_bin_id_fkey");
+
             entity.Property(e => e.PoLineId).HasColumnName("po_line_id");
             entity.Property(e => e.ReceiptId).HasColumnName("receipt_id");
             entity.Property(e => e.ReceivedQuantity)
@@ -956,6 +965,8 @@ public partial class WmsDbContext : DbContext
                 .HasConstraintName("production_material_issue_lines_uom_id_fkey");
         });
 
+
+
         modelBuilder.Entity<ProductionMaterialRequirement>(entity =>
         {
             entity.HasKey(e => e.RequirementId).HasName("production_material_requirements_pkey");
@@ -974,10 +985,10 @@ public partial class WmsDbContext : DbContext
                 .HasPrecision(18, 6)
                 .HasColumnName("issued_quantity");
             entity.Property(e => e.ItemId).HasColumnName("item_id");
-            entity.Property(e => e.ProductionOrderId).HasColumnName("production_order_id");
             entity.Property(e => e.RequiredQuantity)
                 .HasPrecision(18, 6)
                 .HasColumnName("required_quantity");
+            entity.Property(e => e.ProductionOrderId).HasColumnName("production_order_id");
             entity.Property(e => e.ReservedQuantity)
                 .HasPrecision(18, 6)
                 .HasColumnName("reserved_quantity");

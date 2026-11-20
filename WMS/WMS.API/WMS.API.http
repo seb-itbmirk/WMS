@@ -555,17 +555,12 @@ Content-Type:application/json
   "unitOfMeasure": "pH"
 }
 
-#### 
-GET http://localhost:5191/api/production-material-issues/1
-
 ###
-POST http://localhost:5191/api/production-wastes
+POST https://localhost:7100/api/putaway-tasks/1/complete
+
+### 
+POST https://localhost:7100/api/stock-adjustments/4/post
 Content-Type:application/json
 {
-  "productionOrderId": 1,
-  "lotId": 4,
-  "wastedQuantity": 5,
-  "uomId": 1,
-  "wasteReason": "TEST - Production material spillage",
-  "recordedBy": null
+  "postedBy": null
 }

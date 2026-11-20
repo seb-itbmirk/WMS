@@ -10,7 +10,7 @@ public partial class GoodsReceiptLine
     public long ReceiptId { get; set; }
 
     public long? PoLineId { get; set; }
-
+    public long? ReceivingBinId { get; set; }
     public long ItemId { get; set; }
 
     public long LotId { get; set; }

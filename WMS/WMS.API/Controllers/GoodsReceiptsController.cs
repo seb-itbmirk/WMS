@@ -50,13 +50,224 @@ namespace WMS.API.Controllers
                         l.ReceivedQuantity,
                         l.UomId,
                         l.InspectionStatus,
-                        l.PoLineId
+                        l.PoLineId,
+                        l.ReceivingBinId
                     })
                 })
                 .ToListAsync();
 
             return Ok(receipts);
         }
+
+
+        // POST: api/goods-receipts/1/post
+        [HttpPost("{id:long}/post")]
+        public async Task<IActionResult> Post(long id)
+        {
+            await using var transaction = await _context.Database
+                .BeginTransactionAsync(
+                    System.Data.IsolationLevel.Serializable);
+
+            try
+            {
+                // Find receipt and its lines
+                var receipt = await _context.GoodsReceipts
+                    .Include(r => r.GoodsReceiptLines)
+                        .ThenInclude(l => l.Item)
+                    .Include(r => r.GoodsReceiptLines)
+                        .ThenInclude(l => l.Lot)
+                    .FirstOrDefaultAsync(r => r.ReceiptId == id);
+
+                if (receipt == null)
+                    return NotFound("Goods receipt not found.");
+
+                if (receipt.Status != "DRAFT")
+                    return BadRequest(
+                        "Only DRAFT goods receipts can be posted.");
+
+                if (receipt.GoodsReceiptLines.Count == 0)
+                    return BadRequest(
+                        "Goods receipt has no receipt lines.");
+
+                // Validate all lines before posting
+                foreach (var line in receipt.GoodsReceiptLines)
+                {
+                    if (line.ReceivedQuantity <= 0)
+                        return BadRequest(
+                            $"Invalid received quantity for receipt line {line.ReceiptLineId}.");
+
+                    if (!line.ReceivingBinId.HasValue)
+                        return BadRequest(
+                            $"Receipt line {line.ReceiptLineId} has no receiving bin.");
+
+                    if (line.Item == null || !line.Item.IsActive)
+                        return BadRequest(
+                            $"Item ID {line.ItemId} does not exist or is inactive.");
+
+                    if (line.Lot == null || line.Lot.ItemId != line.ItemId)
+                        return BadRequest(
+                            $"Inventory lot {line.LotId} does not belong to item {line.ItemId}.");
+
+                    // Require receipt quantity to use the item's base UOM
+                    if (line.UomId != line.Item.BaseUomId)
+                        return BadRequest(
+                            $"Receipt line {line.ReceiptLineId} must use the item's base UOM.");
+
+                    // Validate receiving bin
+                    var receivingBin = await _context.StorageBins
+                        .Include(b => b.Zone)
+                        .FirstOrDefaultAsync(b =>
+                            b.BinId == line.ReceivingBinId.Value &&
+                            b.IsActive);
+
+                    if (receivingBin == null)
+                        return BadRequest(
+                            $"Receiving bin {line.ReceivingBinId} does not exist or is inactive.");
+
+                    if (receivingBin.Zone.WarehouseId != receipt.WarehouseId)
+                        return BadRequest(
+                            $"Receiving bin {receivingBin.BinCode} does not belong to the receipt warehouse.");
+
+                    string inspectionStatus =
+                        line.InspectionStatus.Trim().ToUpper();
+
+                    string[] allowedStatuses =
+                    {
+                "PENDING",
+                "APPROVED",
+                "REJECTED",
+                "QUARANTINED"
+            };
+
+                    if (!allowedStatuses.Contains(inspectionStatus))
+                        return BadRequest(
+                            $"Invalid inspection status on receipt line {line.ReceiptLineId}.");
+                }
+
+                // Create inventory transaction
+                var inventoryTransaction = new InventoryTransaction
+                {
+                    TransactionNumber = $"GR-{Guid.NewGuid():N}",
+                    TransactionType = "RECEIPT",
+                    TransactionDate = DateTime.UtcNow,
+                    ReferenceNumber = receipt.ReceiptNumber,
+                    Remarks = $"Goods receipt posting: {receipt.ReceiptNumber}",
+                    Status = "POSTED",
+                    CreatedBy = receipt.ReceivedBy,
+                    PostedBy = receipt.ReceivedBy,
+                    PostedAt = DateTime.UtcNow
+                };
+
+                _context.InventoryTransactions.Add(inventoryTransaction);
+
+                await _context.SaveChangesAsync();
+
+                // Process each receipt line
+                foreach (var line in receipt.GoodsReceiptLines)
+                {
+                    string inspectionStatus =
+                        line.InspectionStatus.Trim().ToUpper();
+
+                    // Determine inventory stock status
+                    string stockStatus =
+                        inspectionStatus == "APPROVED"
+                            ? "AVAILABLE"
+                            : "QUARANTINE";
+
+                    // Keep rejected goods quarantined rather than usable
+                    if (inspectionStatus == "REJECTED")
+                        stockStatus = "QUARANTINE";
+
+                    // Update lot quality status
+                    line.Lot.QualityStatus =
+                        inspectionStatus == "APPROVED"
+                            ? "APPROVED"
+                            : inspectionStatus == "PENDING"
+                                ? "PENDING"
+                                : "QUARANTINED";
+
+                    // Find existing inventory balance
+                    var balance = await _context.InventoryBalances
+                        .FirstOrDefaultAsync(b =>
+                            b.LotId == line.LotId &&
+                            b.BinId == line.ReceivingBinId.Value &&
+                            b.StockStatus == stockStatus);
+
+                    if (balance == null)
+                    {
+                        // Create new inventory balance
+                        balance = new InventoryBalance
+                        {
+                            LotId = line.LotId,
+                            BinId = line.ReceivingBinId.Value,
+                            StockStatus = stockStatus,
+                            QuantityOnHand = line.ReceivedQuantity,
+                            QuantityReserved = 0,
+                            UpdatedAt = DateTime.UtcNow
+                        };
+
+                        _context.InventoryBalances.Add(balance);
+                    }
+                    else
+                    {
+                        // Add quantity to existing balance
+                        balance.QuantityOnHand += line.ReceivedQuantity;
+                        balance.UpdatedAt = DateTime.UtcNow;
+                    }
+
+                    // Create inventory transaction line
+                    var transactionLine = new InventoryTransactionLine
+                    {
+                        TransactionId = inventoryTransaction.TransactionId,
+                        LotId = line.LotId,
+                        FromBinId = null,
+                        ToBinId = line.ReceivingBinId.Value,
+                        Quantity = line.ReceivedQuantity,
+                        UomId = line.UomId,
+                        LineRemarks = $"Goods receipt line {line.ReceiptLineId}"
+                    };
+
+                    _context.InventoryTransactionLines.Add(transactionLine);
+                }
+
+                // Mark receipt as posted
+                receipt.Status = "POSTED";
+
+                await _context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                return Ok(new
+                {
+                    message = "Goods receipt posted successfully.",
+                    receiptId = receipt.ReceiptId,
+                    receiptNumber = receipt.ReceiptNumber,
+                    receiptStatus = receipt.Status,
+                    inventoryTransactionId =
+                        inventoryTransaction.TransactionId,
+                    transactionNumber =
+                        inventoryTransaction.TransactionNumber,
+                    transactionType =
+                        inventoryTransaction.TransactionType
+                });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+
+                var errorMessage = ex.InnerException?.Message ?? ex.Message;
+
+                Console.WriteLine("GOODS RECEIPT POSTING ERROR:");
+                Console.WriteLine(ex.ToString());
+
+                return StatusCode(500, new
+                {
+                    message = "An error occurred while posting the goods receipt.",
+                    error = errorMessage
+                });
+            }
+        }
+
 
         // GET: api/goods-receipts/1
         [HttpGet("{id:long}")]
@@ -96,7 +307,8 @@ namespace WMS.API.Controllers
                     l.ReceivedQuantity,
                     l.UomId,
                     l.InspectionStatus,
-                    l.PoLineId
+                    l.PoLineId,
+                    l.ReceivingBinId
                 })
             });
         }
@@ -204,6 +416,28 @@ namespace WMS.API.Controllers
                         return BadRequest(
                             $"PO line {line.PoLineId} does not match the selected Purchase Order, item, or UOM.");
                 }
+
+                // Validate receiving bin if supplied
+                if (line.ReceivingBinId.HasValue)
+                {
+                    var receivingBin = await _context.StorageBins
+                        .Include(b => b.Zone)
+                        .FirstOrDefaultAsync(b =>
+                            b.BinId == line.ReceivingBinId.Value &&
+                            b.IsActive);
+
+                    if (receivingBin == null)
+                    {
+                        return BadRequest(
+                            $"Receiving bin ID {line.ReceivingBinId} does not exist or is inactive.");
+                    }
+
+                    if (receivingBin.Zone.WarehouseId != dto.WarehouseId)
+                    {
+                        return BadRequest(
+                            $"Receiving bin {receivingBin.BinCode} does not belong to the selected warehouse.");
+                    }
+                }
             }
 
             // Create receipt header
@@ -229,6 +463,7 @@ namespace WMS.API.Controllers
                     LotId = line.LotId,
                     ReceivedQuantity = line.ReceivedQuantity,
                     UomId = line.UomId,
+                    ReceivingBinId = line.ReceivingBinId,
                     InspectionStatus =
                         line.InspectionStatus.Trim().ToUpper(),
                     PoLineId = line.PoLineId

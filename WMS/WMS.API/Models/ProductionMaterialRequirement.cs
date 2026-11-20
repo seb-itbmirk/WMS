@@ -10,9 +10,7 @@ public partial class ProductionMaterialRequirement
     public long ProductionOrderId { get; set; }
 
     public long ItemId { get; set; }
-
     public decimal RequiredQuantity { get; set; }
-
     public decimal ReservedQuantity { get; set; }
 
     public decimal IssuedQuantity { get; set; }

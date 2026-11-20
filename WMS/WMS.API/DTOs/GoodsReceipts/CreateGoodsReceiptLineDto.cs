@@ -1,20 +1,20 @@
 ﻿
 namespace WMS.API.DTOs.GoodsReceipts
 {
-    public class CreateGoodsReceiptDto
+    public class CreateGoodsReceiptLineDto
     {
-        public string ReceiptNumber { get; set; } = null!;
+        public long ItemId { get; set; }
 
-        public long? PurchaseOrderId { get; set; }
+        public long LotId { get; set; }
 
-        public long WarehouseId { get; set; }
+        public decimal ReceivedQuantity { get; set; }
 
-        public DateTime? ReceiptDate { get; set; }
+        public long? ReceivingBinId { get; set; }
 
-        public string? DeliveryReference { get; set; }
+        public long UomId { get; set; }
 
-        public long? ReceivedBy { get; set; }
+        public string InspectionStatus { get; set; } = "PENDING";
 
-        public List<CreateGoodsReceiptLineDto> Lines { get; set; } = new();
+        public long? PoLineId { get; set; }
     }
 }

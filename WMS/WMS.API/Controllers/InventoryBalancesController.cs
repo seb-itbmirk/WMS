@@ -30,6 +30,7 @@ namespace WMS.API.Controllers
                     b.LotId,
                     b.Lot.BatchCode,
                     b.Lot.SupplierBatchCode,
+                    b.Lot.ExpiryDate,
 
                     b.Lot.ItemId,
                     ItemCode = b.Lot.Item.ItemCode,
@@ -37,6 +38,10 @@ namespace WMS.API.Controllers
 
                     b.BinId,
                     BinCode = b.Bin.BinCode,
+
+                    WarehouseId = b.Bin.Zone.WarehouseId,
+                    WarehouseCode = b.Bin.Zone.Warehouse.WarehouseCode,
+                    WarehouseName = b.Bin.Zone.Warehouse.WarehouseName,
 
                     b.StockStatus,
                     b.QuantityOnHand,
@@ -64,6 +69,8 @@ namespace WMS.API.Controllers
 
                     b.LotId,
                     b.Lot.BatchCode,
+                    b.Lot.SupplierBatchCode,
+                    b.Lot.ExpiryDate,
 
                     b.Lot.ItemId,
                     ItemCode = b.Lot.Item.ItemCode,
@@ -71,6 +78,10 @@ namespace WMS.API.Controllers
 
                     b.BinId,
                     BinCode = b.Bin.BinCode,
+
+                    WarehouseId = b.Bin.Zone.WarehouseId,
+                    WarehouseCode = b.Bin.Zone.Warehouse.WarehouseCode,
+                    WarehouseName = b.Bin.Zone.Warehouse.WarehouseName,
 
                     b.StockStatus,
                     b.QuantityOnHand,

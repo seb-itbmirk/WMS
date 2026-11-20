@@ -2,11 +2,28 @@
 import { useEffect, useState } from 'react'
 import api from './services/api'
 import './App.css'
+import ProductionOrdersPage from './pages/ProductionOrders'
+import InventoryPage from './pages/Inventory'
+import StockTransfersPage from './pages/StockTransfers'
+import StorageLocationsPage from './pages/StorageLocations'
+import ItemsPage from './pages/Items'
+import InventoryOverviewPage from './pages/InventoryOverview'
+import BillOfMaterialsPage from './pages/BillOfMaterials'
+import PurchaseOrdersPage from './pages/PurchaseOrders'
+import QualityInspections from "./pages/QualityInspections"
+import StockAdjustmentsPage from "./pages/StockAdjustments"
+import GoodsReceiptsPage from './pages/GoodsReceipts'
+import PutawayTasksPage from './pages/PutawayTasks'
+import StockCountsPage from './pages/StockCounts'
+
 
 function App() {
     const [page, setPage] = useState('Dashboard')
     const [warehouses, setWarehouses] = useState([])
     const [categories, setCategories] = useState([])
+    const [productionDashboard, setProductionDashboard] = useState(null)
+    const [productionLoading, setProductionLoading] = useState(true)
+    const [productionError, setProductionError] = useState(false)
     const [loading, setLoading] = useState(true)
     const [apiError, setApiError] = useState(false)
 
@@ -16,6 +33,10 @@ function App() {
     const [formData, setFormData] = useState({})
     const [saving, setSaving] = useState(false)
     const [message, setMessage] = useState('')
+
+    const [productionOrders, setProductionOrders] = useState([])
+    const [ordersLoading, setOrdersLoading] = useState(false)
+    const [ordersError, setOrdersError] = useState('')
 
     // Load warehouse and category records
     const loadData = async () => {
@@ -40,7 +61,46 @@ function App() {
 
     useEffect(() => {
         loadData()
+        loadProductionDashboard()
     }, [])
+
+    useEffect(() => {
+    if (page === 'Production Orders') {
+        loadProductionOrders()
+    }
+    }, [page])
+
+    const loadProductionOrders = async () => {
+    try {
+        setOrdersLoading(true)
+        setOrdersError('')
+
+        const response = await api.get('/production-orders')
+        setProductionOrders(response.data)
+    } catch (error) {
+        console.error('Unable to load production orders:', error)
+        setOrdersError('Unable to load production orders.')
+    } finally {
+        setOrdersLoading(false)
+    }
+}
+
+    // Load production dashboard summary
+    const loadProductionDashboard = async () => {
+        try {
+            setProductionLoading(true)
+            setProductionError(false)
+
+            const response = await api.get('/production-orders/dashboard')
+
+            setProductionDashboard(response.data)
+        } catch (error) {
+            console.error('Unable to load production dashboard:', error)
+            setProductionError(true)
+        } finally {
+            setProductionLoading(false)
+        }
+    }
 
     // Open the form for adding or editing
     const openForm = (type, record = null) => {
@@ -160,14 +220,20 @@ function App() {
             links: [
                 { name: 'Items & Materials', icon: '□' },
                 { name: 'Stock Overview', icon: '▧' },
-                { name: 'Stock Transfers', icon: '⇄' }
+                { name: 'Stock Transfers', icon: '⇄' },
+                { name: 'Stock Adjustments', icon: '🔧' },
+                { name: 'Goods Receipts', icon: '�' },
+                { name: 'Putaway Tasks', icon: '⇅' },
+                { name: 'Stock Counts', icon: '☰' }
             ]
         },
         {
             heading: 'MANUFACTURING',
             links: [
                 { name: 'Production Orders', icon: '⚙' },
-                { name: 'Bill of Materials', icon: '◫' }
+                { name: 'Bill of Materials', icon: '◫' },
+                { name: 'Purchase Orders', icon: '№' },
+                { name: 'Quality Inspections', icon: '☑' }
             ]
         },
         {
@@ -244,13 +310,12 @@ function App() {
                 </header>
 
                 <div className="page-content">
-
                     {apiError && (
                         <div className="error-banner">
                             Unable to retrieve data. Check your backend API connection.
                         </div>
                     )}
-
+                    
                     {page === 'Dashboard' && (
                         <Dashboard
                             warehouses={warehouses}
@@ -258,6 +323,9 @@ function App() {
                             activeCategories={activeCategories}
                             loading={loading}
                             apiError={apiError}
+                            productionDashboard={productionDashboard}
+                            productionLoading={productionLoading}
+                            productionError={productionError}
                             setPage={setPage}
                         />
                     )}
@@ -288,7 +356,76 @@ function App() {
                         />
                     )}
 
-                    {!['Dashboard', 'Warehouses', 'Item Categories'].includes(page) && (
+                    {page === 'Production Orders' && (
+                        <ProductionOrdersPage
+                            productionOrders={productionOrders}
+                            loading={ordersLoading}
+                            error={ordersError}
+                            onRefresh={loadProductionOrders}
+                        />
+                    )}
+
+                    {page === 'Stock Transfers' && (
+                        <StockTransfersPage />
+                    )}
+
+                    {page === 'Storage Locations' && 
+                        <StorageLocationsPage 
+                    />}
+
+                    {page === 'Items & Materials' && 
+                        <ItemsPage 
+                    />}
+
+                    {page === 'Stock Overview' && 
+                        <InventoryOverviewPage 
+                    />}
+
+                    {page === 'Bill of Materials' && 
+                        <BillOfMaterialsPage 
+                    />}
+
+                    {page === 'Purchase Orders' && 
+                        <PurchaseOrdersPage 
+                    />}
+
+                    {page === 'Quality Inspections' && 
+                        <QualityInspections 
+                    />}
+
+                    {page === 'Stock Adjustments' && 
+                        <StockAdjustmentsPage 
+                    />}
+
+                    {page === 'Goods Receipts' && 
+                        <GoodsReceiptsPage 
+                    />}
+
+                    {page === 'Putaway Tasks' && 
+                        <PutawayTasksPage 
+                    />}
+
+                    {page === 'Stock Counts' && 
+                        <StockCountsPage 
+                    />}
+
+                    {![
+                        'Dashboard', 
+                        'Warehouses', 
+                        'Item Categories', 
+                        'Production Orders', 
+                        'Stock Overview', 
+                        'Stock Transfers',
+                        'Storage Locations',
+                        'Items & Materials',
+                        'Bill of Materials',
+                        'Purchase Orders',
+                        'Quality Inspections',
+                        'Stock Adjustments',
+                        'Goods Receipts',
+                        'Putaway Tasks',
+                        'Stock Counts'
+                    ].includes(page) && (
                         <section className="intro">
                             <div>
                                 <div className="eyebrow">
@@ -444,6 +581,9 @@ function Dashboard({
     activeCategories,
     loading,
     apiError,
+    productionDashboard,
+    productionLoading,
+    productionError,
     setPage
 }) {
     return (
@@ -511,12 +651,87 @@ function Dashboard({
                         <p>Inventory module pending</p>
                     </div>
 
-                    <div className="metric">
+                    <div
+                        className="metric clickable-metric"
+                        onClick={() => setPage('Production Orders')}
+                    >
                         <span className="metric-label">PRODUCTION ORDERS</span>
-                        <div className="metric-value">—</div>
-                        <p>Manufacturing module pending</p>
+
+                        <div className="metric-value">
+                            {productionLoading
+                                ? '—'
+                                : productionError
+                                    ? '!'
+                                    : productionDashboard?.totalOrders ?? 0}
+
+                            <span className="metric-icon">⚙</span>
+                        </div>
+
+                        <p>
+                            {productionError
+                                ? 'Unable to retrieve production data'
+                                : 'Total registered production orders'}
+                        </p>
                     </div>
                 </div>
+            </section>
+
+            <section className="section-block">
+                <div className="section-title">
+                    <div>
+                        <span className="eyebrow">MANUFACTURING</span>
+                        <h2>Production status overview</h2>
+                    </div>
+
+                    <button
+                        className="text-button"
+                        onClick={() => setPage('Production Orders')}
+                    >
+                        View production orders →
+                    </button>
+                </div>
+
+                {productionLoading ? (
+                    <div className="panel empty-content">
+                        Loading production summary...
+                    </div>
+                ) : productionError ? (
+                    <div className="panel empty-content">
+                        Unable to retrieve production summary.
+                    </div>
+                ) : (
+                    <div className="production-status-grid">
+                        <div className="production-status-card">
+                            <span className="status-dot status-draft"></span>
+                            <span>Draft</span>
+                            <strong>{productionDashboard?.draftOrders ?? 0}</strong>
+                        </div>
+
+                        <div className="production-status-card">
+                            <span className="status-dot status-released"></span>
+                            <span>Released</span>
+                            <strong>{productionDashboard?.releasedOrders ?? 0}</strong>
+                        </div>
+
+                        <div className="production-status-card">
+                            <span className="status-dot status-progress"></span>
+                            <span>In Progress</span>
+                            <strong>{productionDashboard?.inProgressOrders ?? 0}</strong>
+                        </div>
+
+                        <div className="production-status-card">
+                            <span className="status-dot status-completed"></span>
+                            <span>Completed</span>
+                            <strong>{productionDashboard?.completedOrders ?? 0}</strong>
+                        </div>
+
+                        <div className="production-status-card">
+                            <span className="status-dot status-cancelled"></span>
+                            <span>Cancelled</span>
+                            <strong>{productionDashboard?.cancelledOrders ?? 0}</strong>
+                        </div>
+                    </div>
+                )}
             </section>
 
             <section className="lower-section">

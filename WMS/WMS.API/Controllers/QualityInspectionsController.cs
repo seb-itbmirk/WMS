@@ -257,13 +257,15 @@ namespace WMS.API.Controllers
         }
 
         // POST: api/quality-inspections/1/finalize
+        // POST: api/quality-inspections/1/finalize
         [HttpPost("{id:long}/finalize")]
         public async Task<IActionResult> Finalize(
             long id,
             [FromBody] FinalizeQualityInspectionDto dto)
         {
             await using var transaction =
-                await _context.Database.BeginTransactionAsync();
+                await _context.Database.BeginTransactionAsync(
+                    System.Data.IsolationLevel.Serializable);
 
             var inspection = await _context.QualityInspections
                 .Include(i => i.QualityInspectionLines)
@@ -283,6 +285,16 @@ namespace WMS.API.Controllers
                 {
                     message = "Add at least one inspection line before finalizing."
                 });
+
+            // Do not allow an inspection containing only NOT_APPLICABLE lines.
+            if (!inspection.QualityInspectionLines.Any(
+                l => l.Result == "PASS" || l.Result == "FAIL"))
+            {
+                return BadRequest(new
+                {
+                    message = "At least one inspection line must have a measured result."
+                });
+            }
 
             var lot = await _context.InventoryLots
                 .FirstOrDefaultAsync(l => l.LotId == inspection.LotId);
@@ -331,6 +343,7 @@ namespace WMS.API.Controllers
 
             var previousStatus = lot.QualityStatus;
 
+            // Update inspection.
             inspection.OverallResult = overallResult;
 
             if (dto.InspectedBy.HasValue)
@@ -339,8 +352,10 @@ namespace WMS.API.Controllers
             if (!string.IsNullOrWhiteSpace(dto.Remarks))
                 inspection.Remarks = dto.Remarks;
 
+            // Update lot quality status.
             lot.QualityStatus = newStatus;
 
+            // Record quality status history.
             var history = new QualityStatusHistory
             {
                 LotId = lot.LotId,
@@ -353,6 +368,103 @@ namespace WMS.API.Controllers
 
             _context.QualityStatusHistories.Add(history);
 
+            // Release quarantined inventory only when the lot is approved.
+            if (newStatus == "APPROVED")
+            {
+                var quarantineBalances = await _context.InventoryBalances
+                    .Where(b =>
+                        b.LotId == lot.LotId &&
+                        b.StockStatus == "QUARANTINE" &&
+                        b.QuantityOnHand > 0)
+                    .ToListAsync();
+
+                if (quarantineBalances.Any())
+                {
+                    // Get the item's base unit of measure for the ledger lines.
+                    var item = await _context.Items
+                        .FirstOrDefaultAsync(i => i.ItemId == lot.ItemId);
+
+                    if (item == null)
+                        return BadRequest(new { message = "Item linked to this lot was not found." });
+
+                    var inventoryTransaction = new InventoryTransaction
+                    {
+                        TransactionNumber = $"QIR-{Guid.NewGuid():N}",
+                        TransactionType = "TRANSFER",
+                        TransactionDate = DateTime.UtcNow,
+                        ReferenceNumber = $"QUALITY-INSPECTION-{inspection.InspectionId}",
+                        Remarks = "Quality approval: QUARANTINE to AVAILABLE",
+                        Status = "POSTED",
+                        PostedAt = DateTime.UtcNow,
+                        PostedBy = dto.InspectedBy ?? inspection.InspectedBy
+                    };
+
+                    _context.InventoryTransactions.Add(inventoryTransaction);
+
+                    await _context.SaveChangesAsync();
+
+                    foreach (var quarantineBalance in quarantineBalances)
+                    {
+                        if (quarantineBalance.QuantityReserved >
+                            quarantineBalance.QuantityOnHand)
+                        {
+                            return BadRequest(new
+                            {
+                                message = $"Invalid reserved quantity for inventory balance {quarantineBalance.BalanceId}."
+                            });
+                        }
+
+                        var quantityToRelease = quarantineBalance.QuantityOnHand;
+                        var reservedQuantity = quarantineBalance.QuantityReserved;
+
+                        // Find an AVAILABLE balance for the same lot and bin.
+                        var availableBalance = await _context.InventoryBalances
+                            .FirstOrDefaultAsync(b =>
+                                b.LotId == lot.LotId &&
+                                b.BinId == quarantineBalance.BinId &&
+                                b.StockStatus == "AVAILABLE");
+
+                        if (availableBalance == null)
+                        {
+                            availableBalance = new InventoryBalance
+                            {
+                                LotId = lot.LotId,
+                                BinId = quarantineBalance.BinId,
+                                StockStatus = "AVAILABLE",
+                                QuantityOnHand = 0,
+                                QuantityReserved = 0,
+                                UpdatedAt = DateTime.UtcNow
+                            };
+
+                            _context.InventoryBalances.Add(availableBalance);
+                        }
+
+                        // Move quantity and reservations without changing the total.
+                        availableBalance.QuantityOnHand += quantityToRelease;
+                        availableBalance.QuantityReserved += reservedQuantity;
+                        availableBalance.UpdatedAt = DateTime.UtcNow;
+
+                        quarantineBalance.QuantityOnHand = 0;
+                        quarantineBalance.QuantityReserved = 0;
+                        quarantineBalance.UpdatedAt = DateTime.UtcNow;
+
+                        // Record the movement in the inventory ledger.
+                        var transactionLine = new InventoryTransactionLine
+                        {
+                            TransactionId = inventoryTransaction.TransactionId,
+                            LotId = lot.LotId,
+                            FromBinId = quarantineBalance.BinId,
+                            ToBinId = quarantineBalance.BinId,
+                            Quantity = quantityToRelease,
+                            UomId = item.BaseUomId,
+                            LineRemarks = "QUALITY RELEASE: QUARANTINE to AVAILABLE"
+                        };
+
+                        _context.InventoryTransactionLines.Add(transactionLine);
+                    }
+                }
+            }
+
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
@@ -364,7 +476,8 @@ namespace WMS.API.Controllers
                 inspection.InspectedBy,
                 lot.LotId,
                 PreviousQualityStatus = previousStatus,
-                NewQualityStatus = lot.QualityStatus
+                NewQualityStatus = lot.QualityStatus,
+                InventoryReleased = newStatus == "APPROVED"
             });
         }
     }
