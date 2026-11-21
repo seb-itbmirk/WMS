@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from 'react'
 import api from '../services/api'
 
@@ -62,12 +61,12 @@ export default function InventoryOverviewPage() {
         })
     }, [balances, search, warehouseFilter, statusFilter])
 
-        const quarantineCount = filteredBalances.filter(
+    const quarantineCount = filteredBalances.filter(
         balance => balance.stockStatus === 'QUARANTINE'
     ).length
 
-    const damagedCount = filteredBalances.filter(
-        balance => balance.stockStatus === 'DAMAGED'
+    const availableCount = filteredBalances.filter(
+        balance => balance.stockStatus === 'AVAILABLE'
     ).length
 
     const uniqueItems = new Set(
@@ -95,14 +94,8 @@ export default function InventoryOverviewPage() {
         switch (status) {
             case 'AVAILABLE':
                 return 'io-available'
-            case 'RESERVED':
-                return 'io-reserved'
             case 'QUARANTINE':
                 return 'io-quarantine'
-            case 'IN_TRANSIT':
-                return 'io-transit'
-            case 'DAMAGED':
-                return 'io-damaged'
             default:
                 return 'io-default'
         }
@@ -114,7 +107,9 @@ export default function InventoryOverviewPage() {
                 <div>
                     <p className="io-eyebrow">INVENTORY MANAGEMENT</p>
                     <h1>Stock Overview</h1>
-                    <p>View inventory balances across all warehouses and storage locations.</p>
+                    <p>
+                        View inventory balances across all warehouses and storage locations.
+                    </p>
                 </div>
 
                 <button className="io-refresh-button" onClick={loadData}>
@@ -143,15 +138,15 @@ export default function InventoryOverviewPage() {
                 </div>
 
                 <div className="io-summary-card">
-                    <span>QUARANTINE RECORDS</span>
-                    <strong>{quarantineCount}</strong>
-                    <small>Balances awaiting quality clearance</small>
+                    <span>AVAILABLE RECORDS</span>
+                    <strong>{availableCount}</strong>
+                    <small>Balances available for operations</small>
                 </div>
 
                 <div className="io-summary-card">
-                    <span>DAMAGED RECORDS</span>
-                    <strong>{damagedCount}</strong>
-                    <small>Balances marked as damaged</small>
+                    <span>QUARANTINE RECORDS</span>
+                    <strong>{quarantineCount}</strong>
+                    <small>Balances awaiting quality clearance</small>
                 </div>
             </div>
 
@@ -202,10 +197,7 @@ export default function InventoryOverviewPage() {
                         >
                             <option value="ALL">All statuses</option>
                             <option value="AVAILABLE">Available</option>
-                            <option value="RESERVED">Reserved</option>
                             <option value="QUARANTINE">Quarantine</option>
-                            <option value="IN_TRANSIT">In Transit</option>
-                            <option value="DAMAGED">Damaged</option>
                         </select>
                     </div>
                 </div>
@@ -276,7 +268,9 @@ export default function InventoryOverviewPage() {
                                             {formatQuantity(balance.availableQuantity)}
                                         </td>
                                         <td>
-                                            <span className={`io-status ${statusClass(balance.stockStatus)}`}>
+                                            <span
+                                                className={`io-status ${statusClass(balance.stockStatus)}`}
+                                            >
                                                 {balance.stockStatus || 'UNKNOWN'}
                                             </span>
                                         </td>

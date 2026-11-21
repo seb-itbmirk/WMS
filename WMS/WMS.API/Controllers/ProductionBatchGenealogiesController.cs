@@ -24,6 +24,7 @@ namespace WMS.API.Controllers
         public async Task<IActionResult> GetAll()
         {
             var records = await _context.ProductionBatchGenealogies
+                .AsNoTracking()
                 .OrderByDescending(g => g.GenealogyId)
                 .Select(g => new
                 {
@@ -56,6 +57,7 @@ namespace WMS.API.Controllers
         public async Task<IActionResult> GetById(long id)
         {
             var record = await _context.ProductionBatchGenealogies
+                .AsNoTracking()
                 .Where(g => g.GenealogyId == id)
                 .Select(g => new
                 {
@@ -66,10 +68,12 @@ namespace WMS.API.Controllers
                     g.InputLotId,
                     InputBatchCode = g.InputLot.BatchCode,
                     InputItemCode = g.InputLot.Item.ItemCode,
+                    InputItemName = g.InputLot.Item.ItemName,
 
                     g.OutputLotId,
                     OutputBatchCode = g.OutputLot.BatchCode,
                     OutputItemCode = g.OutputLot.Item.ItemCode,
+                    OutputItemName = g.OutputLot.Item.ItemName,
 
                     g.ConsumedQuantity,
                     g.ProducedQuantity,
@@ -79,10 +83,12 @@ namespace WMS.API.Controllers
                 .FirstOrDefaultAsync();
 
             if (record == null)
+            {
                 return NotFound(new
                 {
                     message = "Production batch genealogy record not found."
                 });
+            }
 
             return Ok(record);
         }
@@ -96,14 +102,18 @@ namespace WMS.API.Controllers
                 .AnyAsync(p => p.ProductionOrderId == productionOrderId);
 
             if (!orderExists)
+            {
                 return NotFound(new
                 {
                     message = "Production order not found."
                 });
+            }
 
             var records = await _context.ProductionBatchGenealogies
+                .AsNoTracking()
                 .Where(g => g.ProductionOrderId == productionOrderId)
                 .OrderBy(g => g.InputLotId)
+                .ThenBy(g => g.OutputLotId)
                 .Select(g => new
                 {
                     g.GenealogyId,
@@ -111,10 +121,12 @@ namespace WMS.API.Controllers
                     g.InputLotId,
                     InputBatchCode = g.InputLot.BatchCode,
                     InputItemCode = g.InputLot.Item.ItemCode,
+                    InputItemName = g.InputLot.Item.ItemName,
 
                     g.OutputLotId,
                     OutputBatchCode = g.OutputLot.BatchCode,
                     OutputItemCode = g.OutputLot.Item.ItemCode,
+                    OutputItemName = g.OutputLot.Item.ItemName,
 
                     g.ConsumedQuantity,
                     g.ProducedQuantity,
@@ -134,13 +146,17 @@ namespace WMS.API.Controllers
                 .AnyAsync(l => l.LotId == outputLotId);
 
             if (!lotExists)
+            {
                 return NotFound(new
                 {
                     message = "Output lot not found."
                 });
+            }
 
             var records = await _context.ProductionBatchGenealogies
+                .AsNoTracking()
                 .Where(g => g.OutputLotId == outputLotId)
+                .OrderBy(g => g.InputLotId)
                 .Select(g => new
                 {
                     g.GenealogyId,
@@ -154,6 +170,8 @@ namespace WMS.API.Controllers
 
                     g.OutputLotId,
                     OutputBatchCode = g.OutputLot.BatchCode,
+                    OutputItemCode = g.OutputLot.Item.ItemCode,
+                    OutputItemName = g.OutputLot.Item.ItemName,
 
                     g.ConsumedQuantity,
                     g.ProducedQuantity,
@@ -203,34 +221,42 @@ namespace WMS.API.Controllers
                         p.ProductionOrderId == dto.ProductionOrderId);
 
                 if (order == null)
+                {
                     return NotFound(new
                     {
                         message = "Production order not found."
                     });
+                }
 
                 var inputLot = await _context.InventoryLots
                     .FirstOrDefaultAsync(l => l.LotId == dto.InputLotId);
 
                 if (inputLot == null)
+                {
                     return NotFound(new
                     {
                         message = "Input lot not found."
                     });
+                }
 
                 var outputLot = await _context.InventoryLots
                     .FirstOrDefaultAsync(l => l.LotId == dto.OutputLotId);
 
                 if (outputLot == null)
+                {
                     return NotFound(new
                     {
                         message = "Output lot not found."
                     });
+                }
 
                 if (outputLot.ItemId != order.FinishedItemId)
+                {
                     return BadRequest(new
                     {
                         message = "Output lot must belong to the production order's finished product."
                     });
+                }
 
                 var outputExists = await _context.ProductionOutputs
                     .AnyAsync(o =>
@@ -238,64 +264,83 @@ namespace WMS.API.Controllers
                         o.FinishedLotId == dto.OutputLotId);
 
                 if (!outputExists)
+                {
                     return BadRequest(new
                     {
                         message = "Output lot is not registered as an output of this production order."
                     });
+                }
 
-                var requirement = await _context.ProductionMaterialRequirements
-                    .FirstOrDefaultAsync(r =>
-                        r.ProductionOrderId == dto.ProductionOrderId &&
-                        r.ItemId == inputLot.ItemId);
+                var requirement =
+                    await _context.ProductionMaterialRequirements
+                        .FirstOrDefaultAsync(r =>
+                            r.ProductionOrderId == dto.ProductionOrderId &&
+                            r.ItemId == inputLot.ItemId);
 
                 if (requirement == null)
+                {
                     return BadRequest(new
                     {
                         message = "Input lot's item is not part of this production order."
                     });
+                }
 
                 if (dto.UomId != requirement.UomId)
+                {
                     return BadRequest(new
                     {
                         message = "Genealogy UOM must match the input material requirement UOM."
                     });
+                }
 
+                // Total quantity consumed from this input lot.
                 var consumedForLot =
                     await _context.ProductionConsumptions
                         .Where(c =>
                             c.ProductionOrderId == dto.ProductionOrderId &&
                             c.LotId == dto.InputLotId)
-                        .SumAsync(c => (decimal?)c.ConsumedQuantity) ?? 0;
+                        .SumAsync(c =>
+                            (decimal?)c.ConsumedQuantity) ?? 0m;
 
+                // Quantity from this input lot already linked to output lots.
                 var alreadyLinked =
                     await _context.ProductionBatchGenealogies
                         .Where(g =>
                             g.ProductionOrderId == dto.ProductionOrderId &&
                             g.InputLotId == dto.InputLotId)
-                        .SumAsync(g => (decimal?)g.ConsumedQuantity) ?? 0;
+                        .SumAsync(g =>
+                            (decimal?)g.ConsumedQuantity) ?? 0m;
 
                 if (alreadyLinked + dto.ConsumedQuantity > consumedForLot)
+                {
                     return BadRequest(new
                     {
                         message = "Genealogy quantity cannot exceed the consumed quantity recorded for this input lot.",
                         consumedQuantity = consumedForLot,
                         alreadyLinkedQuantity = alreadyLinked,
-                        requestedQuantity = dto.ConsumedQuantity
+                        requestedQuantity = dto.ConsumedQuantity,
+                        remainingQuantity =
+                            consumedForLot - alreadyLinked
                     });
+                }
 
+                // Total quantity produced in this output lot.
                 var outputQuantity =
                     await _context.ProductionOutputs
                         .Where(o =>
                             o.ProductionOrderId == dto.ProductionOrderId &&
                             o.FinishedLotId == dto.OutputLotId)
-                        .SumAsync(o => (decimal?)o.ProducedQuantity) ?? 0;
+                        .SumAsync(o =>
+                            (decimal?)o.ProducedQuantity) ?? 0m;
 
+                // Quantity from this output lot already linked to input lots.
                 var alreadyProducedLinked =
                     await _context.ProductionBatchGenealogies
                         .Where(g =>
                             g.ProductionOrderId == dto.ProductionOrderId &&
                             g.OutputLotId == dto.OutputLotId)
-                        .SumAsync(g => (decimal?)g.ProducedQuantity) ?? 0;
+                        .SumAsync(g =>
+                            (decimal?)g.ProducedQuantity) ?? 0m;
 
                 if (dto.ProducedQuantity.HasValue &&
                     alreadyProducedLinked + dto.ProducedQuantity.Value >
@@ -306,7 +351,9 @@ namespace WMS.API.Controllers
                         message = "Linked produced quantity cannot exceed the production output quantity.",
                         outputQuantity,
                         alreadyLinkedQuantity = alreadyProducedLinked,
-                        requestedQuantity = dto.ProducedQuantity
+                        requestedQuantity = dto.ProducedQuantity.Value,
+                        remainingQuantity =
+                            outputQuantity - alreadyProducedLinked
                     });
                 }
 
@@ -334,10 +381,15 @@ namespace WMS.API.Controllers
                         genealogyId = genealogy.GenealogyId,
                         productionOrderId = order.ProductionOrderId,
                         productionNumber = order.ProductionNumber,
+
                         inputLotId = inputLot.LotId,
                         inputBatchCode = inputLot.BatchCode,
+                        inputItemId = inputLot.ItemId,
+
                         outputLotId = outputLot.LotId,
                         outputBatchCode = outputLot.BatchCode,
+                        outputItemId = outputLot.ItemId,
+
                         consumedQuantity = genealogy.ConsumedQuantity,
                         producedQuantity = genealogy.ProducedQuantity,
                         uomId = genealogy.UomId

@@ -26,10 +26,12 @@ namespace WMS.API.Controllers
                 .AnyAsync(p => p.ProductionOrderId == productionOrderId);
 
             if (!orderExists)
+            {
                 return NotFound(new
                 {
                     message = "Production order not found."
                 });
+            }
 
             var reservations = await _context.InventoryReservations
                 .Where(r =>
@@ -142,7 +144,9 @@ namespace WMS.API.Controllers
                         requirement.ReservedQuantity;
 
                     if (remainingQuantity <= 0)
+                    {
                         continue;
+                    }
 
                     // Find eligible inventory balances in the production warehouse.
                     var balances = await _context.InventoryBalances
@@ -221,14 +225,18 @@ namespace WMS.API.Controllers
                     foreach (var balance in balances)
                     {
                         if (quantityToReserve <= 0)
+                        {
                             break;
+                        }
 
                         var availableQuantity =
                             balance.QuantityOnHand -
                             balance.QuantityReserved;
 
                         if (availableQuantity <= 0)
+                        {
                             continue;
+                        }
 
                         var reserveQuantity = Math.Min(
                             availableQuantity,
@@ -325,7 +333,10 @@ namespace WMS.API.Controllers
                     });
                 }
 
+                // Include Lot because the requirement recalculation below
+                // uses reservation.Lot.ItemId.
                 var activeReservations = await _context.InventoryReservations
+                    .Include(r => r.Lot)
                     .Where(r =>
                         r.ReferenceType == "PRODUCTION_ORDER" &&
                         r.ReferenceId == productionOrderId &&
@@ -388,7 +399,9 @@ namespace WMS.API.Controllers
                     requirement.ReservedQuantity -= releasedQuantity;
 
                     if (requirement.ReservedQuantity < 0)
+                    {
                         requirement.ReservedQuantity = 0;
+                    }
                 }
 
                 await _context.SaveChangesAsync();

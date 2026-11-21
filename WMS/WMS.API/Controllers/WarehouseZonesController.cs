@@ -2,8 +2,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WMS.API.Data;
-using WMS.API.Models;
 using WMS.API.DTOs;
+using WMS.API.Models;
 
 namespace WMS.API.Controllers;
 
@@ -23,6 +23,7 @@ public class WarehouseZonesController : ControllerBase
     public async Task<IActionResult> GetZones(long warehouseId)
     {
         var warehouseExists = await _context.Warehouses
+            .AsNoTracking()
             .AnyAsync(w => w.WarehouseId == warehouseId);
 
         if (!warehouseExists)
@@ -31,7 +32,9 @@ public class WarehouseZonesController : ControllerBase
         }
 
         var zones = await _context.WarehouseZones
+            .AsNoTracking()
             .Where(z => z.WarehouseId == warehouseId)
+            .OrderBy(z => z.ZoneCode)
             .ToListAsync();
 
         return Ok(zones);
@@ -42,6 +45,7 @@ public class WarehouseZonesController : ControllerBase
     public async Task<IActionResult> GetZone(long warehouseId, long id)
     {
         var zone = await _context.WarehouseZones
+            .AsNoTracking()
             .FirstOrDefaultAsync(z =>
                 z.WarehouseId == warehouseId &&
                 z.ZoneId == id);
@@ -57,8 +61,34 @@ public class WarehouseZonesController : ControllerBase
     // POST: api/warehouses/1/zones
     [HttpPost]
     public async Task<IActionResult> CreateZone(
-        long warehouseId, CreateWarehouseZoneDto dto)
+        long warehouseId,
+        [FromBody] CreateWarehouseZoneDto dto)
     {
+        if (dto == null)
+        {
+            return BadRequest(new { message = "Zone data is required." });
+        }
+
+        var zoneCode = dto.ZoneCode?.Trim();
+        var zoneName = dto.ZoneName?.Trim();
+
+        if (string.IsNullOrWhiteSpace(zoneCode) ||
+            string.IsNullOrWhiteSpace(zoneName))
+        {
+            return BadRequest(new
+            {
+                message = "Zone code and zone name are required."
+            });
+        }
+
+        if (zoneCode.Length > 40 || zoneName.Length > 100)
+        {
+            return BadRequest(new
+            {
+                message = "Zone code must not exceed 40 characters and zone name must not exceed 100 characters."
+            });
+        }
+
         var warehouseExists = await _context.Warehouses
             .AnyAsync(w => w.WarehouseId == warehouseId);
 
@@ -66,8 +96,6 @@ public class WarehouseZonesController : ControllerBase
         {
             return NotFound(new { message = "Warehouse not found." });
         }
-
-        var zoneCode = dto.ZoneCode.Trim();
 
         var existingZone = await _context.WarehouseZones
             .AnyAsync(z =>
@@ -86,25 +114,56 @@ public class WarehouseZonesController : ControllerBase
         {
             WarehouseId = warehouseId,
             ZoneCode = zoneCode,
-            ZoneName = dto.ZoneName.Trim()
+            ZoneName = zoneName
         };
 
         _context.WarehouseZones.Add(zone);
 
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict(new
+            {
+                message = "Unable to create zone. The zone code may already exist in this warehouse."
+            });
+        }
 
         return CreatedAtAction(
             nameof(GetZone),
-            new { warehouseId = warehouseId, id = zone.ZoneId },
-            zone
-        );
+            new { warehouseId, id = zone.ZoneId },
+            zone);
     }
 
     // PUT: api/warehouses/1/zones/1
     [HttpPut("{id:long}")]
     public async Task<IActionResult> UpdateZone(
-        long warehouseId, long id, UpdateWarehouseZoneDto dto)
+        long warehouseId,
+        long id,
+        [FromBody] UpdateWarehouseZoneDto dto)
     {
+        if (dto == null)
+        {
+            return BadRequest(new { message = "Zone data is required." });
+        }
+
+        var zoneName = dto.ZoneName?.Trim();
+
+        if (string.IsNullOrWhiteSpace(zoneName))
+        {
+            return BadRequest(new { message = "Zone name is required." });
+        }
+
+        if (zoneName.Length > 100)
+        {
+            return BadRequest(new
+            {
+                message = "Zone name must not exceed 100 characters."
+            });
+        }
+
         var zone = await _context.WarehouseZones
             .FirstOrDefaultAsync(z =>
                 z.WarehouseId == warehouseId &&
@@ -115,7 +174,7 @@ public class WarehouseZonesController : ControllerBase
             return NotFound(new { message = "Warehouse zone not found." });
         }
 
-        zone.ZoneName = dto.ZoneName.Trim();
+        zone.ZoneName = zoneName;
 
         await _context.SaveChangesAsync();
 

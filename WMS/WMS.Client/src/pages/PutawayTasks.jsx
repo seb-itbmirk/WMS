@@ -106,17 +106,20 @@ export default function PutawayTasksPage() {
                 )
                 const receivingBinId = getValue(line, 'receivingBinId', 'ReceivingBinId')
 
-                const alreadyAssigned = tasks
-                    .filter(task =>
-                        Number(getValue(task, 'receiptLineId', 'ReceiptLineId')) ===
-                        Number(receiptLineId)
+                
+            const alreadyAssigned = tasks
+                .filter(task =>
+                    Number(getValue(task, 'receiptLineId', 'ReceiptLineId')) ===
+                        Number(receiptLineId) &&
+                    String(getValue(task, 'status', 'Status')).toUpperCase() !== 'CANCELLED'
+                )
+                .reduce((total, task) => {
+                    const quantity = Number(
+                        getValue(task, 'quantity', 'Quantity') || 0
                     )
-                    .reduce((total, task) => {
-                        const quantity = Number(
-                            getValue(task, 'quantity', 'Quantity') || 0
-                        )
-                        return total + quantity
-                    }, 0)
+                    return total + quantity
+                }, 0)
+
 
                 const remainingQuantity = Math.max(
                     0,
@@ -632,23 +635,21 @@ export default function PutawayTasksPage() {
                                 <label>Warehouse *</label>
                                 <select
                                     value={form.warehouseId}
-                                    onChange={event =>
-                                        handleWarehouseChange(event.target.value)
-                                    }
+                                    disabled={!selectedReceiptLine}
                                     required
                                 >
-                                    <option value="">Select warehouse</option>
-                                    {warehouses.map(warehouse => {
-                                        const id = getValue(warehouse, 'warehouseId', 'WarehouseId')
-                                        const code = getValue(warehouse, 'warehouseCode', 'WarehouseCode')
-                                        const name = getValue(warehouse, 'warehouseName', 'WarehouseName')
+                                    <option value="">
+                                        {selectedReceiptLine
+                                            ? 'Receipt warehouse'
+                                            : 'Select a receipt line first'}
+                                    </option>
 
-                                        return (
-                                            <option key={id} value={id}>
-                                                {code ? `${code} — ` : ''}{name || `Warehouse ${id}`}
-                                            </option>
-                                        )
-                                    })}
+                                    {selectedReceiptLine && (
+                                        <option value={selectedReceiptLine.warehouseId}>
+                                            {selectedReceiptLine.warehouseName ||
+                                                getWarehouseName(selectedReceiptLine.warehouseId)}
+                                        </option>
+                                    )}
                                 </select>
 
                                 <label>Zone *</label>

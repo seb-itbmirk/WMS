@@ -23,6 +23,7 @@ namespace WMS.API.Controllers
         public async Task<IActionResult> GetAll()
         {
             var orders = await _context.ProductionOrders
+                .AsNoTracking()
                 .OrderByDescending(p => p.CreatedAt)
                 .Select(p => new
                 {
@@ -51,12 +52,12 @@ namespace WMS.API.Controllers
             return Ok(orders);
         }
 
-
         // GET: api/production-orders/dashboard
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetDashboard()
         {
             var statusCounts = await _context.ProductionOrders
+                .AsNoTracking()
                 .GroupBy(p => p.ProductionStatus)
                 .Select(g => new
                 {
@@ -94,12 +95,12 @@ namespace WMS.API.Controllers
             });
         }
 
-
         // GET: api/production-orders/1
         [HttpGet("{id:long}")]
         public async Task<IActionResult> GetById(long id)
         {
             var order = await _context.ProductionOrders
+                .AsNoTracking()
                 .Where(p => p.ProductionOrderId == id)
                 .Select(p => new
                 {
@@ -143,20 +144,22 @@ namespace WMS.API.Controllers
                 .FirstOrDefaultAsync();
 
             if (order == null)
+            {
                 return NotFound(new
                 {
                     message = "Production order not found."
                 });
+            }
 
             return Ok(order);
         }
-
 
         // GET: api/production-orders/1/progress
         [HttpGet("{id:long}/progress")]
         public async Task<IActionResult> GetProgress(long id)
         {
             var order = await _context.ProductionOrders
+                .AsNoTracking()
                 .Where(p => p.ProductionOrderId == id)
                 .Select(p => new
                 {
@@ -203,12 +206,12 @@ namespace WMS.API.Controllers
             });
         }
 
-
         // GET: api/production-orders/1/materials-summary
         [HttpGet("{id:long}/materials-summary")]
         public async Task<IActionResult> GetMaterialsSummary(long id)
         {
             var order = await _context.ProductionOrders
+                .AsNoTracking()
                 .Include(p => p.ProductionMaterialRequirements)
                     .ThenInclude(r => r.Item)
                 .FirstOrDefaultAsync(p => p.ProductionOrderId == id);
@@ -222,6 +225,7 @@ namespace WMS.API.Controllers
             }
 
             var consumptionByItem = await _context.ProductionConsumptions
+                .AsNoTracking()
                 .Where(c => c.ProductionOrderId == id)
                 .GroupBy(c => c.Lot.ItemId)
                 .Select(g => new
@@ -232,6 +236,7 @@ namespace WMS.API.Controllers
                 .ToListAsync();
 
             var wasteByItem = await _context.ProductionWastes
+                .AsNoTracking()
                 .Where(w => w.ProductionOrderId == id)
                 .GroupBy(w => w.Lot.ItemId)
                 .Select(g => new
@@ -284,9 +289,7 @@ namespace WMS.API.Controllers
             });
         }
 
-
         // GET: api/production-orders/history
-
         [HttpGet("history")]
         public async Task<IActionResult> GetProductionHistory(
             [FromQuery] string? status,
@@ -296,14 +299,30 @@ namespace WMS.API.Controllers
             [FromQuery] int pageSize = 10)
         {
             if (page < 1)
-                return BadRequest(new { message = "Page must be at least 1." });
+            {
+                return BadRequest(new
+                {
+                    message = "Page must be at least 1."
+                });
+            }
 
             if (pageSize < 1 || pageSize > 100)
-                return BadRequest(new { message = "Page size must be between 1 and 100." });
+            {
+                return BadRequest(new
+                {
+                    message = "Page size must be between 1 and 100."
+                });
+            }
 
-            if (startDate.HasValue && endDate.HasValue &&
+            if (startDate.HasValue &&
+                endDate.HasValue &&
                 endDate.Value < startDate.Value)
-                return BadRequest(new { message = "End date cannot be earlier than start date." });
+            {
+                return BadRequest(new
+                {
+                    message = "End date cannot be earlier than start date."
+                });
+            }
 
             var query = _context.ProductionOrders
                 .AsNoTracking()
@@ -311,14 +330,19 @@ namespace WMS.API.Controllers
 
             if (!string.IsNullOrWhiteSpace(status))
             {
+                var normalizedStatus = status.Trim().ToUpperInvariant();
+
                 query = query.Where(p =>
-                    p.ProductionStatus == status.Trim().ToUpper());
+                    p.ProductionStatus == normalizedStatus);
             }
 
             if (startDate.HasValue)
             {
+                var inclusiveStartDate =
+                    startDate.Value.ToDateTime(TimeOnly.MinValue);
+
                 query = query.Where(p =>
-                    p.CreatedAt >= startDate.Value.ToDateTime(TimeOnly.MinValue));
+                    p.CreatedAt >= inclusiveStartDate);
             }
 
             if (endDate.HasValue)
@@ -326,7 +350,8 @@ namespace WMS.API.Controllers
                 var exclusiveEndDate = endDate.Value.AddDays(1)
                     .ToDateTime(TimeOnly.MinValue);
 
-                query = query.Where(p => p.CreatedAt < exclusiveEndDate);
+                query = query.Where(p =>
+                    p.CreatedAt < exclusiveEndDate);
             }
 
             var totalRecords = await query.CountAsync();
@@ -369,34 +394,60 @@ namespace WMS.API.Controllers
             });
         }
 
-
-
-
-
         // POST: api/production-orders
         [HttpPost]
         public async Task<IActionResult> Create(
             [FromBody] CreateProductionOrderDto dto)
         {
+            if (dto == null)
+            {
+                return BadRequest(new
+                {
+                    message = "Production order data is required."
+                });
+            }
+
             if (string.IsNullOrWhiteSpace(dto.ProductionNumber))
+            {
                 return BadRequest(new
                 {
                     message = "Production number is required."
                 });
+            }
+
+            if (dto.BomId <= 0)
+            {
+                return BadRequest(new
+                {
+                    message = "A valid BOM is required."
+                });
+            }
+
+            if (dto.WarehouseId <= 0)
+            {
+                return BadRequest(new
+                {
+                    message = "A valid warehouse is required."
+                });
+            }
 
             if (dto.PlannedQuantity <= 0)
+            {
                 return BadRequest(new
                 {
                     message = "Planned quantity must be greater than zero."
                 });
+            }
 
             if (dto.PlannedStartDate.HasValue &&
                 dto.PlannedEndDate.HasValue &&
                 dto.PlannedEndDate.Value < dto.PlannedStartDate.Value)
+            {
                 return BadRequest(new
                 {
                     message = "Planned end date cannot be earlier than planned start date."
                 });
+            }
 
             var productionNumber = dto.ProductionNumber.Trim();
 
@@ -404,12 +455,14 @@ namespace WMS.API.Controllers
                 .AnyAsync(p => p.ProductionNumber == productionNumber);
 
             if (duplicateNumber)
+            {
                 return Conflict(new
                 {
                     message = "Production number already exists."
                 });
+            }
 
-            // Find active BOM and its components
+            // Load BOM and its related data.
             var bom = await _context.BillOfMaterials
                 .Include(b => b.FinishedItem)
                     .ThenInclude(i => i.Category)
@@ -421,84 +474,128 @@ namespace WMS.API.Controllers
                 .FirstOrDefaultAsync(b => b.BomId == dto.BomId);
 
             if (bom == null)
+            {
                 return BadRequest(new
                 {
                     message = "BOM does not exist."
                 });
+            }
 
             if (bom.Status != "ACTIVE")
+            {
                 return BadRequest(new
                 {
                     message = "Only active BOMs can be used for production."
                 });
+            }
+
+            if (bom.OutputQuantity <= 0)
+            {
+                return BadRequest(new
+                {
+                    message = "BOM output quantity must be greater than zero."
+                });
+            }
 
             if (!bom.BomLines.Any())
+            {
                 return BadRequest(new
                 {
                     message = "BOM has no components."
                 });
+            }
 
             if (!bom.FinishedItem.IsActive ||
                 !bom.FinishedItem.Category.IsActive ||
                 bom.FinishedItem.Category.CategoryCode != "FG")
+            {
                 return BadRequest(new
                 {
                     message = "BOM must reference an active Finished Goods item."
                 });
+            }
 
-            // Validate BOM effective dates against planned start date
+            // Validate BOM effective dates against planned start date.
             var productionDate = dto.PlannedStartDate ??
                 DateOnly.FromDateTime(DateTime.UtcNow);
 
             if (bom.EffectiveFrom.HasValue &&
                 productionDate < bom.EffectiveFrom.Value)
+            {
                 return BadRequest(new
                 {
                     message = "BOM is not yet effective for the planned production date."
                 });
+            }
 
             if (bom.EffectiveTo.HasValue &&
                 productionDate > bom.EffectiveTo.Value)
+            {
                 return BadRequest(new
                 {
                     message = "BOM has expired for the planned production date."
                 });
+            }
 
             if (!bom.OutputUom.IsActive)
+            {
                 return BadRequest(new
                 {
                     message = "BOM output unit of measure is inactive."
                 });
+            }
 
-            // Validate warehouse
+            // Validate warehouse.
             var warehouse = await _context.Warehouses
                 .FirstOrDefaultAsync(w =>
                     w.WarehouseId == dto.WarehouseId &&
                     w.IsActive);
 
             if (warehouse == null)
+            {
                 return BadRequest(new
                 {
                     message = "Warehouse does not exist or is inactive."
                 });
+            }
 
-            // Validate BOM components
+            // Validate BOM components.
             foreach (var line in bom.BomLines)
             {
+                if (line.RequiredQuantity <= 0)
+                {
+                    return BadRequest(new
+                    {
+                        message = $"Required quantity for component {line.ComponentItem.ItemCode} must be greater than zero."
+                    });
+                }
+
+                if (line.WastagePercentage < 0)
+                {
+                    return BadRequest(new
+                    {
+                        message = $"Wastage percentage for component {line.ComponentItem.ItemCode} cannot be negative."
+                    });
+                }
+
                 if (!line.ComponentItem.IsActive)
+                {
                     return BadRequest(new
                     {
                         message = $"Component {line.ComponentItem.ItemCode} is inactive."
                     });
+                }
 
                 if (!line.Uom.IsActive)
+                {
                     return BadRequest(new
                     {
                         message = $"UOM for component {line.ComponentItem.ItemCode} is inactive."
                     });
+                }
             }
 
-            // Calculate material requirements
+            // Calculate material requirements from BOM components.
             var requirements = bom.BomLines.Select(line =>
                 new ProductionMaterialRequirement
                 {
@@ -516,7 +613,15 @@ namespace WMS.API.Controllers
                 })
                 .ToList();
 
-            // Save production order and requirements together
+            if (requirements.Any(r => r.RequiredQuantity <= 0))
+            {
+                return BadRequest(new
+                {
+                    message = "Calculated material requirement quantities must be greater than zero."
+                });
+            }
+
+            // Save production order and material requirements together.
             await using var transaction =
                 await _context.Database.BeginTransactionAsync();
 

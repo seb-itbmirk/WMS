@@ -1,12 +1,9 @@
 ﻿
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WMS.API.Data;
-using WMS.API.Models;
 using WMS.API.DTOs.StockTransfers;
+using WMS.API.Models;
 
 namespace WMS.API.Controllers
 {
@@ -26,10 +23,7 @@ namespace WMS.API.Controllers
         public async Task<IActionResult> GetAll()
         {
             var transfers = await _context.StockTransfers
-                .Include(t => t.SourceWarehouse)
-                .Include(t => t.DestinationWarehouse)
-                .Include(t => t.StockTransferLines)
-                    .ThenInclude(l => l.Lot)
+                .AsNoTracking()
                 .OrderByDescending(t => t.TransferId)
                 .Select(t => new
                 {
@@ -46,70 +40,76 @@ namespace WMS.API.Controllers
                     t.ReceivedBy,
                     t.DispatchedAt,
                     t.ReceivedAt,
-
-                    Lines = t.StockTransferLines.Select(l => new
-                    {
-                        l.TransferLineId,
-                        l.LotId,
-                        l.Lot.BatchCode,
-                        l.SourceBinId,
-                        l.DestinationBinId,
-                        l.RequestedQuantity,
-                        l.DispatchedQuantity,
-                        l.ReceivedQuantity,
-                        l.UomId,
-                        l.DiscrepancyReason
-                    })
+                    Lines = t.StockTransferLines
+                        .OrderBy(l => l.TransferLineId)
+                        .Select(l => new
+                        {
+                            l.TransferLineId,
+                            l.LotId,
+                            l.Lot.BatchCode,
+                            l.SourceBinId,
+                            l.DestinationBinId,
+                            l.RequestedQuantity,
+                            l.DispatchedQuantity,
+                            l.ReceivedQuantity,
+                            l.UomId,
+                            l.DiscrepancyReason
+                        })
+                        .ToList()
                 })
                 .ToListAsync();
 
             return Ok(transfers);
         }
 
-        // GET: api/stock-transfers/1
+        // GET: api/stock-transfers/{id}
         [HttpGet("{id:long}")]
         public async Task<IActionResult> GetById(long id)
         {
+            if (id <= 0)
+                return BadRequest("A valid transfer ID is required.");
+
             var transfer = await _context.StockTransfers
-                .Include(t => t.SourceWarehouse)
-                .Include(t => t.DestinationWarehouse)
-                .Include(t => t.StockTransferLines)
-                    .ThenInclude(l => l.Lot)
-                .FirstOrDefaultAsync(t => t.TransferId == id);
+                .AsNoTracking()
+                .Where(t => t.TransferId == id)
+                .Select(t => new
+                {
+                    t.TransferId,
+                    t.TransferNumber,
+                    t.SourceWarehouseId,
+                    SourceWarehouse = t.SourceWarehouse.WarehouseName,
+                    t.DestinationWarehouseId,
+                    DestinationWarehouse = t.DestinationWarehouse.WarehouseName,
+                    t.TransferDate,
+                    t.Status,
+                    t.RequestedBy,
+                    t.DispatchedBy,
+                    t.ReceivedBy,
+                    t.DispatchedAt,
+                    t.ReceivedAt,
+                    Lines = t.StockTransferLines
+                        .OrderBy(l => l.TransferLineId)
+                        .Select(l => new
+                        {
+                            l.TransferLineId,
+                            l.LotId,
+                            l.Lot.BatchCode,
+                            l.SourceBinId,
+                            l.DestinationBinId,
+                            l.RequestedQuantity,
+                            l.DispatchedQuantity,
+                            l.ReceivedQuantity,
+                            l.UomId,
+                            l.DiscrepancyReason
+                        })
+                        .ToList()
+                })
+                .FirstOrDefaultAsync();
 
             if (transfer == null)
                 return NotFound("Stock transfer not found.");
 
-            return Ok(new
-            {
-                transfer.TransferId,
-                transfer.TransferNumber,
-                transfer.SourceWarehouseId,
-                SourceWarehouse = transfer.SourceWarehouse.WarehouseName,
-                transfer.DestinationWarehouseId,
-                DestinationWarehouse = transfer.DestinationWarehouse.WarehouseName,
-                transfer.TransferDate,
-                transfer.Status,
-                transfer.RequestedBy,
-                transfer.DispatchedBy,
-                transfer.ReceivedBy,
-                transfer.DispatchedAt,
-                transfer.ReceivedAt,
-
-                Lines = transfer.StockTransferLines.Select(l => new
-                {
-                    l.TransferLineId,
-                    l.LotId,
-                    l.Lot.BatchCode,
-                    l.SourceBinId,
-                    l.DestinationBinId,
-                    l.RequestedQuantity,
-                    l.DispatchedQuantity,
-                    l.ReceivedQuantity,
-                    l.UomId,
-                    l.DiscrepancyReason
-                })
-            });
+            return Ok(transfer);
         }
 
         // POST: api/stock-transfers
@@ -117,22 +117,72 @@ namespace WMS.API.Controllers
         public async Task<IActionResult> Create(
             [FromBody] CreateStockTransferDto dto)
         {
-            // Validate transfer number.
+            if (dto == null)
+                return BadRequest("Transfer details are required.");
+
             if (string.IsNullOrWhiteSpace(dto.TransferNumber))
                 return BadRequest("Transfer number is required.");
 
-            bool numberExists = await _context.StockTransfers
-                .AnyAsync(t => t.TransferNumber == dto.TransferNumber);
+            string transferNumber = dto.TransferNumber.Trim();
 
-            if (numberExists)
-                return BadRequest("Transfer number already exists.");
+            if (transferNumber.Length > 50)
+                return BadRequest(
+                    "Transfer number cannot exceed 50 characters.");
 
-            // Validate source and destination.
+            if (dto.SourceWarehouseId <= 0 ||
+                dto.DestinationWarehouseId <= 0)
+            {
+                return BadRequest(
+                    "Valid source and destination warehouses are required.");
+            }
+
             if (dto.SourceWarehouseId == dto.DestinationWarehouseId)
+            {
                 return BadRequest(
                     "Source and destination warehouses must be different.");
+            }
+
+            if (dto.Lines == null || !dto.Lines.Any())
+                return BadRequest(
+                    "At least one transfer line is required.");
+
+            if (dto.Lines.Any(l =>
+                l.LotId <= 0 ||
+                l.SourceBinId <= 0 ||
+                l.UomId <= 0 ||
+                l.RequestedQuantity <= 0))
+            {
+                return BadRequest(
+                    "Every transfer line must contain valid lot, source bin, UOM, and positive requested quantity.");
+            }
+
+            // Prevent duplicate lot and source-bin combinations.
+            if (dto.Lines
+                .GroupBy(l => new { l.LotId, l.SourceBinId })
+                .Any(g => g.Count() > 1))
+            {
+                return BadRequest(
+                    "Duplicate lot and source-bin combinations are not allowed.");
+            }
+
+            var numberExists = await _context.StockTransfers
+                .AnyAsync(t => t.TransferNumber == transferNumber);
+
+            if (numberExists)
+                return Conflict("Transfer number already exists.");
+
+            if (dto.RequestedBy.HasValue)
+            {
+                var userExists = await _context.AppUsers
+                    .AsNoTracking()
+                    .AnyAsync(u => u.UserId == dto.RequestedBy.Value);
+
+                if (!userExists)
+                    return BadRequest("Requesting user does not exist.");
+            }
 
             var sourceWarehouse = await _context.Warehouses
+                .AsNoTracking()
                 .FirstOrDefaultAsync(w =>
                     w.WarehouseId == dto.SourceWarehouseId &&
                     w.IsActive);
@@ -142,6 +192,7 @@ namespace WMS.API.Controllers
                     "Source warehouse does not exist or is inactive.");
 
             var destinationWarehouse = await _context.Warehouses
+                .AsNoTracking()
                 .FirstOrDefaultAsync(w =>
                     w.WarehouseId == dto.DestinationWarehouseId &&
                     w.IsActive);
@@ -150,34 +201,17 @@ namespace WMS.API.Controllers
                 return BadRequest(
                     "Destination warehouse does not exist or is inactive.");
 
-            // Validate lines.
-            if (dto.Lines == null || !dto.Lines.Any())
-                return BadRequest(
-                    "At least one transfer line is required.");
-
-            // Validate requesting user.
-            if (dto.RequestedBy.HasValue)
-            {
-                bool userExists = await _context.AppUsers
-                    .AnyAsync(u => u.UserId == dto.RequestedBy.Value);
-
-                if (!userExists)
-                    return BadRequest("Requesting user does not exist.");
-            }
-
-            // Validate each transfer line.
             foreach (var line in dto.Lines)
             {
-                if (line.RequestedQuantity <= 0)
-                    return BadRequest(
-                        "Requested quantity must be greater than zero.");
-
                 var lot = await _context.InventoryLots
+                    .Include(l => l.Item)
                     .FirstOrDefaultAsync(l => l.LotId == line.LotId);
 
                 if (lot == null)
+                {
                     return BadRequest(
                         $"Inventory lot ID {line.LotId} does not exist.");
+                }
 
                 var sourceBin = await _context.StorageBins
                     .Include(b => b.Zone)
@@ -186,27 +220,39 @@ namespace WMS.API.Controllers
                         b.IsActive);
 
                 if (sourceBin == null)
+                {
                     return BadRequest(
                         $"Source bin ID {line.SourceBinId} does not exist or is inactive.");
+                }
 
                 if (sourceBin.Zone.WarehouseId != dto.SourceWarehouseId)
+                {
                     return BadRequest(
                         $"Source bin {sourceBin.BinCode} does not belong to the source warehouse.");
+                }
 
                 var uom = await _context.UnitsOfMeasures
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(u =>
                         u.UomId == line.UomId &&
                         u.IsActive);
 
                 if (uom == null)
+                {
                     return BadRequest(
                         $"UOM ID {line.UomId} does not exist or is inactive.");
+                }
+
+                if (line.UomId != lot.Item.BaseUomId)
+                {
+                    return BadRequest(
+                        $"Transfer line for lot {lot.BatchCode} must use the item's base unit of measure.");
+                }
             }
 
-            // Create transfer.
             var transfer = new StockTransfer
             {
-                TransferNumber = dto.TransferNumber,
+                TransferNumber = transferNumber,
                 SourceWarehouseId = dto.SourceWarehouseId,
                 DestinationWarehouseId = dto.DestinationWarehouseId,
                 TransferDate = DateTime.UtcNow,
@@ -214,7 +260,6 @@ namespace WMS.API.Controllers
                 RequestedBy = dto.RequestedBy
             };
 
-            // Add transfer lines.
             foreach (var line in dto.Lines)
             {
                 transfer.StockTransferLines.Add(
@@ -231,7 +276,15 @@ namespace WMS.API.Controllers
 
             _context.StockTransfers.Add(transfer);
 
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                return Conflict(
+                    "Unable to create transfer. Check whether the transfer number already exists.");
+            }
 
             return CreatedAtAction(
                 nameof(GetById),
@@ -245,38 +298,29 @@ namespace WMS.API.Controllers
                 });
         }
 
-        // POST: api/stock-transfers/1/dispatch
+        // POST: api/stock-transfers/{id}/dispatch
         [HttpPost("{id:long}/dispatch")]
         public async Task<IActionResult> Dispatch(
             long id,
             [FromBody] DispatchStockTransferDto dto)
         {
-            // Start database transaction.
-            await using var dbTransaction =
-                await _context.Database.BeginTransactionAsync();
+            if (id <= 0)
+                return BadRequest("A valid transfer ID is required.");
 
-            // Lock transfer header to prevent simultaneous dispatch.
-            var transfer = await _context.StockTransfers
-                .FromSqlInterpolated(
-                    $"SELECT * FROM stock_transfers WHERE transfer_id = {id} FOR UPDATE")
-                .FirstOrDefaultAsync();
-
-            if (transfer == null)
-                return NotFound("Stock transfer not found.");
-
-            // Load transfer lines.
-            await _context.Entry(transfer)
-                .Collection(t => t.StockTransferLines)
-                .LoadAsync();
-
-            if (transfer.Status != "DRAFT")
-                return BadRequest(
-                    "Only DRAFT transfers can be dispatched.");
+            if (dto == null)
+                return BadRequest("Dispatch details are required.");
 
             if (dto.Lines == null || !dto.Lines.Any())
                 return BadRequest("Dispatch lines are required.");
 
-            // Prevent duplicate transfer line IDs.
+            if (dto.Lines.Any(l =>
+                l.TransferLineId <= 0 ||
+                l.DispatchedQuantity <= 0))
+            {
+                return BadRequest(
+                    "Every dispatch line must have a valid transfer line ID and positive dispatched quantity.");
+            }
+
             if (dto.Lines
                 .GroupBy(l => l.TransferLineId)
                 .Any(g => g.Count() > 1))
@@ -285,7 +329,24 @@ namespace WMS.API.Controllers
                     "Duplicate transfer line IDs are not allowed.");
             }
 
-            // Require all transfer lines.
+            await using var dbTransaction =
+                await _context.Database.BeginTransactionAsync();
+
+            var transfer = await LockTransferAsync(id);
+
+            if (transfer == null)
+                return NotFound("Stock transfer not found.");
+
+            await _context.Entry(transfer)
+                .Collection(t => t.StockTransferLines)
+                .LoadAsync();
+
+            if (transfer.Status != "DRAFT")
+            {
+                return BadRequest(
+                    "Only DRAFT transfers can be dispatched.");
+            }
+
             if (dto.Lines.Count != transfer.StockTransferLines.Count ||
                 transfer.StockTransferLines.Any(tl =>
                     !dto.Lines.Any(dl =>
@@ -295,10 +356,10 @@ namespace WMS.API.Controllers
                     "All transfer lines must be included in the dispatch request.");
             }
 
-            // Validate dispatching user.
             if (dto.DispatchedBy.HasValue)
             {
-                bool userExists = await _context.AppUsers
+                var userExists = await _context.AppUsers
+                    .AsNoTracking()
                     .AnyAsync(u => u.UserId == dto.DispatchedBy.Value);
 
                 if (!userExists)
@@ -306,20 +367,13 @@ namespace WMS.API.Controllers
                         "Dispatching user does not exist.");
             }
 
-            // Validate each dispatch line.
+            var now = DateTime.UtcNow;
+
             foreach (var dispatchLine in dto.Lines)
             {
                 var transferLine = transfer.StockTransferLines
-                    .FirstOrDefault(l =>
+                    .First(l =>
                         l.TransferLineId == dispatchLine.TransferLineId);
-
-                if (transferLine == null)
-                    return BadRequest(
-                        $"Transfer line ID {dispatchLine.TransferLineId} was not found.");
-
-                if (dispatchLine.DispatchedQuantity <= 0)
-                    return BadRequest(
-                        "Dispatched quantity must be greater than zero.");
 
                 if (dispatchLine.DispatchedQuantity !=
                     transferLine.RequestedQuantity)
@@ -328,92 +382,89 @@ namespace WMS.API.Controllers
                         $"Dispatched quantity for transfer line {transferLine.TransferLineId} must equal its requested quantity.");
                 }
 
-                // Get lot and item.
                 var lot = await _context.InventoryLots
                     .Include(l => l.Item)
                     .FirstOrDefaultAsync(l =>
                         l.LotId == transferLine.LotId);
 
                 if (lot == null)
+                {
                     return BadRequest(
                         $"Inventory lot ID {transferLine.LotId} does not exist.");
+                }
 
-                // Check quality status.
                 if (lot.QualityStatus != "APPROVED")
+                {
                     return BadRequest(
                         $"Lot {lot.BatchCode} is not approved for dispatch. Current quality status: {lot.QualityStatus}.");
+                }
 
-                // Check expiry date.
                 if (lot.ExpiryDate.HasValue &&
-                    lot.ExpiryDate.Value <
-                    DateOnly.FromDateTime(DateTime.UtcNow))
+                    lot.ExpiryDate.Value < DateOnly.FromDateTime(now))
                 {
                     return BadRequest(
                         $"Lot {lot.BatchCode} has expired.");
                 }
 
-                // Check source bin.
+                if (transferLine.UomId != lot.Item.BaseUomId)
+                {
+                    return BadRequest(
+                        $"Transfer line for lot {lot.BatchCode} must use the item's base unit of measure.");
+                }
+
                 var sourceBin = await _context.StorageBins
                     .Include(b => b.Zone)
                     .FirstOrDefaultAsync(b =>
-                        b.BinId == transferLine.SourceBinId);
+                        b.BinId == transferLine.SourceBinId &&
+                        b.IsActive);
 
-                if (sourceBin == null || !sourceBin.IsActive)
+                if (sourceBin == null)
+                {
                     return BadRequest(
                         $"Source bin ID {transferLine.SourceBinId} does not exist or is inactive.");
+                }
 
-                // Check bin belongs to source warehouse.
-                if (sourceBin.Zone.WarehouseId !=
-                    transfer.SourceWarehouseId)
+                if (sourceBin.Zone.WarehouseId != transfer.SourceWarehouseId)
                 {
                     return BadRequest(
                         $"Source bin {sourceBin.BinCode} does not belong to the source warehouse.");
                 }
 
-                // Check item base UOM.
-                if (transferLine.UomId != lot.Item.BaseUomId)
-                    return BadRequest(
-                        $"Transfer line for lot {lot.BatchCode} must use the item's base unit of measure.");
-
-                // Lock inventory balance row.
                 var balance = await _context.InventoryBalances
-                    .FromSqlInterpolated(
-                        $"SELECT * FROM inventory_balances WHERE lot_id = {transferLine.LotId} AND bin_id = {transferLine.SourceBinId} AND stock_status = 'AVAILABLE' FOR UPDATE")
+                    .FromSqlInterpolated($@"
+                        SELECT *
+                        FROM inventory_balances
+                        WHERE lot_id = {transferLine.LotId}
+                          AND bin_id = {transferLine.SourceBinId}
+                          AND stock_status = 'AVAILABLE'
+                        FOR UPDATE")
                     .FirstOrDefaultAsync();
 
                 if (balance == null)
+                {
                     return BadRequest(
                         $"No AVAILABLE inventory found for lot {lot.BatchCode} in source bin {sourceBin.BinCode}.");
+                }
 
                 decimal availableQuantity =
                     balance.QuantityOnHand - balance.QuantityReserved;
 
-                if (availableQuantity <
-                    dispatchLine.DispatchedQuantity)
+                if (availableQuantity < dispatchLine.DispatchedQuantity)
                 {
                     return BadRequest(
                         $"Insufficient available inventory for lot {lot.BatchCode}. Available: {availableQuantity}, requested: {dispatchLine.DispatchedQuantity}.");
                 }
 
-                // Deduct inventory.
-                balance.QuantityOnHand -=
-                    dispatchLine.DispatchedQuantity;
+                balance.QuantityOnHand -= dispatchLine.DispatchedQuantity;
+                balance.UpdatedAt = now;
 
-                balance.UpdatedAt = DateTime.UtcNow;
-
-                // Update transfer line.
                 transferLine.DispatchedQuantity =
                     dispatchLine.DispatchedQuantity;
             }
 
-            // Create posted inventory transaction.
-            var now = DateTime.UtcNow;
-
             var inventoryTransaction = new InventoryTransaction
             {
-                TransactionNumber =
-                    "TRF-" + Guid.NewGuid().ToString("N"),
-
+                TransactionNumber = "TRF-" + Guid.NewGuid().ToString("N"),
                 TransactionType = "TRANSFER",
                 TransactionDate = now,
                 ReferenceNumber = transfer.TransferNumber,
@@ -424,7 +475,6 @@ namespace WMS.API.Controllers
                 PostedAt = now
             };
 
-            // Add inventory transaction lines.
             foreach (var dispatchLine in dto.Lines)
             {
                 var transferLine = transfer.StockTransferLines
@@ -446,15 +496,11 @@ namespace WMS.API.Controllers
 
             _context.InventoryTransactions.Add(inventoryTransaction);
 
-            // Update transfer header.
             transfer.Status = "DISPATCHED";
             transfer.DispatchedBy = dto.DispatchedBy;
             transfer.DispatchedAt = now;
 
-            // Save all changes.
             await _context.SaveChangesAsync();
-
-            // Commit transaction.
             await dbTransaction.CommitAsync();
 
             return Ok(new
@@ -463,33 +509,65 @@ namespace WMS.API.Controllers
                 transferId = transfer.TransferId,
                 transferNumber = transfer.TransferNumber,
                 transferStatus = transfer.Status,
-                inventoryTransactionNumber = inventoryTransaction.TransactionNumber,
-                inventoryTransactionType = inventoryTransaction.TransactionType,
-                inventoryTransactionStatus = inventoryTransaction.Status,
+                inventoryTransactionNumber =
+                    inventoryTransaction.TransactionNumber,
+                inventoryTransactionType =
+                    inventoryTransaction.TransactionType,
+                inventoryTransactionStatus =
+                    inventoryTransaction.Status,
                 dispatchedAt = transfer.DispatchedAt
             });
         }
 
-        // POST: api/stock-transfers/1/receive
+        // POST: api/stock-transfers/{id}/receive
         [HttpPost("{id:long}/receive")]
         public async Task<IActionResult> Receive(
             long id,
             [FromBody] ReceiveStockTransferDto dto)
         {
-            // Start database transaction.
+            if (id <= 0)
+                return BadRequest("A valid transfer ID is required.");
+
+            if (dto == null)
+                return BadRequest("Receiving details are required.");
+
+            if (dto.Lines == null || !dto.Lines.Any())
+                return BadRequest("Receiving lines are required.");
+
+            if (dto.Lines.Any(l =>
+                l.TransferLineId <= 0 ||
+                l.DestinationBinId <= 0 ||
+                l.ReceivedQuantity <= 0))
+            {
+                return BadRequest(
+                    "Every receiving line must have valid IDs and a positive received quantity.");
+            }
+
+            if (dto.Lines
+                .GroupBy(l => l.TransferLineId)
+                .Any(g => g.Count() > 1))
+            {
+                return BadRequest(
+                    "Duplicate transfer line IDs are not allowed.");
+            }
+
+            foreach (var line in dto.Lines)
+            {
+                if (line.DiscrepancyReason?.Length > 1000)
+                {
+                    return BadRequest(
+                        "Discrepancy reason cannot exceed 1000 characters.");
+                }
+            }
+
             await using var dbTransaction =
                 await _context.Database.BeginTransactionAsync();
 
-            // Lock transfer header.
-            var transfer = await _context.StockTransfers
-                .FromSqlInterpolated(
-                    $"SELECT * FROM stock_transfers WHERE transfer_id = {id} FOR UPDATE")
-                .FirstOrDefaultAsync();
+            var transfer = await LockTransferAsync(id);
 
             if (transfer == null)
                 return NotFound("Stock transfer not found.");
 
-            // Load transfer lines.
             await _context.Entry(transfer)
                 .Collection(t => t.StockTransferLines)
                 .LoadAsync();
@@ -501,48 +579,17 @@ namespace WMS.API.Controllers
                     "Only DISPATCHED or PARTIALLY_RECEIVED transfers can be received.");
             }
 
-            if (dto.Lines == null || !dto.Lines.Any())
-                return BadRequest("Receiving lines are required.");
-
-            // Prevent duplicate transfer line IDs.
-            if (dto.Lines
-                .GroupBy(l => l.TransferLineId)
-                .Any(g => g.Count() > 1))
-            {
-                return BadRequest(
-                    "Duplicate transfer line IDs are not allowed.");
-            }
-
-            // Validate receiving user.
             if (dto.ReceivedBy.HasValue)
             {
-                bool userExists = await _context.AppUsers
+                var userExists = await _context.AppUsers
+                    .AsNoTracking()
                     .AnyAsync(u => u.UserId == dto.ReceivedBy.Value);
 
                 if (!userExists)
-                    return BadRequest(
-                        "Receiving user does not exist.");
+                    return BadRequest("Receiving user does not exist.");
             }
 
-            var now = DateTime.UtcNow;
-
-            // Create posted inventory transaction.
-            var inventoryTransaction = new InventoryTransaction
-            {
-                TransactionNumber =
-                    "TRR-" + Guid.NewGuid().ToString("N"),
-
-                TransactionType = "TRANSFER",
-                TransactionDate = now,
-                ReferenceNumber = transfer.TransferNumber,
-                Remarks = "Stock transfer receiving",
-                Status = "POSTED",
-                CreatedBy = dto.ReceivedBy,
-                PostedBy = dto.ReceivedBy,
-                PostedAt = now
-            };
-
-            // Process each received line.
+            // Validate every requested receiving line before changing inventory.
             foreach (var receiveLine in dto.Lines)
             {
                 var transferLine = transfer.StockTransferLines
@@ -550,14 +597,11 @@ namespace WMS.API.Controllers
                         l.TransferLineId == receiveLine.TransferLineId);
 
                 if (transferLine == null)
+                {
                     return BadRequest(
                         $"Transfer line ID {receiveLine.TransferLineId} does not belong to this transfer.");
+                }
 
-                if (receiveLine.ReceivedQuantity <= 0)
-                    return BadRequest(
-                        "Received quantity must be greater than zero.");
-
-                // Calculate remaining dispatched quantity.
                 decimal remainingQuantity =
                     transferLine.DispatchedQuantity -
                     transferLine.ReceivedQuantity;
@@ -568,20 +612,18 @@ namespace WMS.API.Controllers
                         $"Received quantity exceeds the remaining dispatched quantity for transfer line {transferLine.TransferLineId}. Remaining: {remainingQuantity}.");
                 }
 
-                // Validate destination bin.
                 var destinationBin = await _context.StorageBins
                     .Include(b => b.Zone)
                     .FirstOrDefaultAsync(b =>
-                        b.BinId == receiveLine.DestinationBinId);
+                        b.BinId == receiveLine.DestinationBinId &&
+                        b.IsActive);
 
-                if (destinationBin == null ||
-                    !destinationBin.IsActive)
+                if (destinationBin == null)
                 {
                     return BadRequest(
                         $"Destination bin ID {receiveLine.DestinationBinId} does not exist or is inactive.");
                 }
 
-                // Validate destination warehouse.
                 if (destinationBin.Zone.WarehouseId !=
                     transfer.DestinationWarehouseId)
                 {
@@ -589,7 +631,6 @@ namespace WMS.API.Controllers
                         $"Destination bin {destinationBin.BinCode} does not belong to the destination warehouse.");
                 }
 
-                // Keep the same destination bin for partial receipts.
                 if (transferLine.DestinationBinId.HasValue &&
                     transferLine.DestinationBinId.Value !=
                     receiveLine.DestinationBinId)
@@ -598,66 +639,100 @@ namespace WMS.API.Controllers
                         $"Transfer line {transferLine.TransferLineId} has already been assigned to another destination bin.");
                 }
 
-                // Load lot and item.
                 var lot = await _context.InventoryLots
                     .Include(l => l.Item)
                     .FirstOrDefaultAsync(l =>
                         l.LotId == transferLine.LotId);
 
                 if (lot == null)
+                {
                     return BadRequest(
                         $"Inventory lot ID {transferLine.LotId} does not exist.");
+                }
 
-                // Recheck quality status.
                 if (lot.QualityStatus != "APPROVED")
                 {
                     return BadRequest(
                         $"Lot {lot.BatchCode} is not approved for receiving. Current quality status: {lot.QualityStatus}.");
                 }
 
-                // Recheck expiry date.
                 if (lot.ExpiryDate.HasValue &&
-                    lot.ExpiryDate.Value <
-                    DateOnly.FromDateTime(now))
+                    lot.ExpiryDate.Value < DateOnly.FromDateTime(DateTime.UtcNow))
                 {
                     return BadRequest(
                         $"Lot {lot.BatchCode} has expired.");
                 }
 
-                // Check item base UOM.
                 if (transferLine.UomId != lot.Item.BaseUomId)
+                {
                     return BadRequest(
                         $"Transfer line for lot {lot.BatchCode} must use the item's base unit of measure.");
+                }
+            }
 
-                // Lock existing destination balance.
-                var balance = await _context.InventoryBalances
-                    .FromSqlInterpolated(
-                        $"SELECT * FROM inventory_balances WHERE lot_id = {transferLine.LotId} AND bin_id = {receiveLine.DestinationBinId} AND stock_status = 'AVAILABLE' FOR UPDATE")
-                    .FirstOrDefaultAsync();
+            // Process balances using a cache so multiple transfer lines
+            // targeting the same lot/bin update one tracked balance entity.
+            var balanceCache =
+                new Dictionary<(long LotId, long BinId), InventoryBalance>();
 
-                if (balance == null)
+            var now = DateTime.UtcNow;
+
+            var inventoryTransaction = new InventoryTransaction
+            {
+                TransactionNumber = "TRR-" + Guid.NewGuid().ToString("N"),
+                TransactionType = "TRANSFER",
+                TransactionDate = now,
+                ReferenceNumber = transfer.TransferNumber,
+                Remarks = "Stock transfer receiving",
+                Status = "POSTED",
+                CreatedBy = dto.ReceivedBy,
+                PostedBy = dto.ReceivedBy,
+                PostedAt = now
+            };
+
+            foreach (var receiveLine in dto.Lines)
+            {
+                var transferLine = transfer.StockTransferLines
+                    .First(l =>
+                        l.TransferLineId == receiveLine.TransferLineId);
+
+                var key = (
+                    transferLine.LotId,
+                    receiveLine.DestinationBinId);
+
+                if (!balanceCache.TryGetValue(key, out var balance))
                 {
-                    // Create a new destination balance.
-                    balance = new InventoryBalance
-                    {
-                        LotId = transferLine.LotId,
-                        BinId = receiveLine.DestinationBinId,
-                        StockStatus = "AVAILABLE",
-                        QuantityOnHand = 0,
-                        QuantityReserved = 0,
-                        UpdatedAt = now
-                    };
+                    balance = await _context.InventoryBalances
+                        .FromSqlInterpolated($@"
+                            SELECT *
+                            FROM inventory_balances
+                            WHERE lot_id = {transferLine.LotId}
+                              AND bin_id = {receiveLine.DestinationBinId}
+                              AND stock_status = 'AVAILABLE'
+                            FOR UPDATE")
+                        .FirstOrDefaultAsync();
 
-                    _context.InventoryBalances.Add(balance);
+                    if (balance == null)
+                    {
+                        balance = new InventoryBalance
+                        {
+                            LotId = transferLine.LotId,
+                            BinId = receiveLine.DestinationBinId,
+                            StockStatus = "AVAILABLE",
+                            QuantityOnHand = 0,
+                            QuantityReserved = 0,
+                            UpdatedAt = now
+                        };
+
+                        _context.InventoryBalances.Add(balance);
+                    }
+
+                    balanceCache[key] = balance;
                 }
 
-                // Add received quantity to destination inventory.
-                balance.QuantityOnHand +=
-                    receiveLine.ReceivedQuantity;
-
+                balance.QuantityOnHand += receiveLine.ReceivedQuantity;
                 balance.UpdatedAt = now;
 
-                // Update transfer line.
                 transferLine.ReceivedQuantity +=
                     receiveLine.ReceivedQuantity;
 
@@ -668,10 +743,9 @@ namespace WMS.API.Controllers
                     receiveLine.DiscrepancyReason))
                 {
                     transferLine.DiscrepancyReason =
-                        receiveLine.DiscrepancyReason;
+                        receiveLine.DiscrepancyReason.Trim();
                 }
 
-                // Create inventory transaction line.
                 inventoryTransaction.InventoryTransactionLines.Add(
                     new InventoryTransactionLine
                     {
@@ -685,10 +759,8 @@ namespace WMS.API.Controllers
                     });
             }
 
-            // Check whether all lines have been fully received.
             bool allLinesReceived = transfer.StockTransferLines
-                .All(l =>
-                    l.ReceivedQuantity >= l.DispatchedQuantity);
+                .All(l => l.ReceivedQuantity >= l.DispatchedQuantity);
 
             transfer.Status = allLinesReceived
                 ? "RECEIVED"
@@ -697,13 +769,9 @@ namespace WMS.API.Controllers
             transfer.ReceivedBy = dto.ReceivedBy;
             transfer.ReceivedAt = now;
 
-            // Save inventory transaction.
             _context.InventoryTransactions.Add(inventoryTransaction);
 
-            // Save all receiving changes.
             await _context.SaveChangesAsync();
-
-            // Commit database transaction.
             await dbTransaction.CommitAsync();
 
             return Ok(new
@@ -719,7 +787,6 @@ namespace WMS.API.Controllers
                 inventoryTransactionStatus =
                     inventoryTransaction.Status,
                 receivedAt = transfer.ReceivedAt,
-
                 Lines = transfer.StockTransferLines.Select(l => new
                 {
                     l.TransferLineId,
@@ -731,6 +798,17 @@ namespace WMS.API.Controllers
                     l.DestinationBinId
                 })
             });
+        }
+
+        private async Task<StockTransfer?> LockTransferAsync(long id)
+        {
+            return await _context.StockTransfers
+                .FromSqlInterpolated($@"
+                    SELECT *
+                    FROM stock_transfers
+                    WHERE transfer_id = {id}
+                    FOR UPDATE")
+                .FirstOrDefaultAsync();
         }
     }
 }

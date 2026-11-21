@@ -15,6 +15,10 @@ import StockAdjustmentsPage from "./pages/StockAdjustments"
 import GoodsReceiptsPage from './pages/GoodsReceipts'
 import PutawayTasksPage from './pages/PutawayTasks'
 import StockCountsPage from './pages/StockCounts'
+import CustomersPage from './pages/Customers'
+import ReportsPage from './pages/Reports'
+import ReplenishmentPage from './pages/Replenishment'
+import SuppliersPage from './pages/Suppliers'
 
 
 function App() {
@@ -224,7 +228,8 @@ function App() {
                 { name: 'Stock Adjustments', icon: '🔧' },
                 { name: 'Goods Receipts', icon: '�' },
                 { name: 'Putaway Tasks', icon: '⇅' },
-                { name: 'Stock Counts', icon: '☰' }
+                { name: 'Stock Counts', icon: '☰' },
+                { name: 'Replenishment', icon: '↻' }
             ]
         },
         {
@@ -234,6 +239,19 @@ function App() {
                 { name: 'Bill of Materials', icon: '◫' },
                 { name: 'Purchase Orders', icon: '№' },
                 { name: 'Quality Inspections', icon: '☑' }
+            ]
+        },
+        {
+            heading: 'CUSTOMERS',
+            links: [
+                { name: 'Customers', icon: '👥' },
+                { name: 'Supplier Management', icon: '▣' },
+            ]
+        },
+        {
+            heading: 'REPORTS',
+            links: [
+                { name: 'Reports & Analytics', icon: '▥' }
             ]
         },
         {
@@ -409,6 +427,22 @@ function App() {
                         <StockCountsPage 
                     />}
 
+                    {page === 'Customers' && 
+                        <CustomersPage 
+                    />}
+
+                    {page === 'Reports & Analytics' && 
+                        <ReportsPage 
+                    />}
+
+                    {page === 'Replenishment' && 
+                        <ReplenishmentPage 
+                    />}
+                    
+                    {page === 'Supplier Management' && 
+                        <SuppliersPage 
+                    />}
+
                     {![
                         'Dashboard', 
                         'Warehouses', 
@@ -424,7 +458,12 @@ function App() {
                         'Stock Adjustments',
                         'Goods Receipts',
                         'Putaway Tasks',
-                        'Stock Counts'
+                        'Stock Counts',
+                        'Customers',
+                        'Reports & Analytics',
+                        'Replenishment',
+                        'Supplier Management'
+
                     ].includes(page) && (
                         <section className="intro">
                             <div>

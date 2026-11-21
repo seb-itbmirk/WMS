@@ -1,10 +1,10 @@
 ﻿
+using System.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WMS.API.Data;
-using WMS.API.Models;
 using WMS.API.DTOs.PutawayTasks;
-using System.Data;
+using WMS.API.Models;
 
 namespace WMS.API.Controllers
 {
@@ -24,11 +24,7 @@ namespace WMS.API.Controllers
         public async Task<IActionResult> GetAll()
         {
             var tasks = await _context.PutawayTasks
-                .Include(p => p.ReceiptLine)
-                    .ThenInclude(r => r.Item)
-                .Include(p => p.Lot)
-                .Include(p => p.FromBin)
-                .Include(p => p.ToBin)
+                .AsNoTracking()
                 .OrderByDescending(p => p.PutawayId)
                 .Select(p => new
                 {
@@ -40,7 +36,8 @@ namespace WMS.API.Controllers
                     ItemName = p.ReceiptLine.Item.ItemName,
                     p.FromBinId,
                     FromBinCode = p.FromBin != null
-                        ? p.FromBin.BinCode : null,
+                        ? p.FromBin.BinCode
+                        : null,
                     p.ToBinId,
                     ToBinCode = p.ToBin.BinCode,
                     p.Quantity,
@@ -53,71 +50,104 @@ namespace WMS.API.Controllers
             return Ok(tasks);
         }
 
-        [HttpGet("debug-mapping")]
-        public IActionResult DebugMapping()
+        // GET: api/putaway-tasks/1
+        [HttpGet("{id:long}")]
+        public async Task<IActionResult> GetById(long id)
         {
-            var entityTypes = new[]
-            {
-        typeof(PutawayTask),
-        typeof(GoodsReceiptLine),
-        typeof(StorageBin),
-        typeof(InventoryBalance)
-    };
-
-            var result = entityTypes.Select(type =>
-            {
-                var entity = _context.Model.FindEntityType(type);
-
-                return new
+            var task = await _context.PutawayTasks
+                .AsNoTracking()
+                .Where(p => p.PutawayId == id)
+                .Select(p => new
                 {
-                    Entity = type.Name,
-                    Table = entity?.GetTableName(),
-                    Schema = entity?.GetSchema()
-                };
-            });
+                    p.PutawayId,
+                    p.ReceiptLineId,
+                    p.LotId,
+                    BatchCode = p.Lot.BatchCode,
+                    ItemCode = p.ReceiptLine.Item.ItemCode,
+                    ItemName = p.ReceiptLine.Item.ItemName,
+                    p.FromBinId,
+                    FromBinCode = p.FromBin != null
+                        ? p.FromBin.BinCode
+                        : null,
+                    p.ToBinId,
+                    ToBinCode = p.ToBin.BinCode,
+                    p.Quantity,
+                    p.Status,
+                    p.AssignedTo,
+                    p.CompletedAt
+                })
+                .FirstOrDefaultAsync();
 
-            return Ok(result);
+            if (task == null)
+            {
+                return NotFound(new
+                {
+                    message = "Putaway task not found."
+                });
+            }
+
+            return Ok(task);
         }
 
-        // POST: api/putaway-tasks/1/complete
-
-        [HttpPost("{id:long}/complete")]
-        public async Task<IActionResult> Complete(long id)
+        // POST: api/putaway-tasks
+        [HttpPost]
+        public async Task<IActionResult> Create(
+            [FromBody] CreatePutawayTaskDto dto)
         {
-            await using var dbTransaction =
+            if (dto == null)
+            {
+                return BadRequest(new
+                {
+                    message = "Putaway task details are required."
+                });
+            }
+
+            if (dto.ReceiptLineId <= 0 ||
+                dto.LotId <= 0 ||
+                dto.ToBinId <= 0 ||
+                dto.Quantity <= 0)
+            {
+                return BadRequest(new
+                {
+                    message = "Enter valid receipt line, lot, destination bin, and positive quantity."
+                });
+            }
+
+            if (dto.FromBinId.HasValue &&
+                dto.FromBinId.Value <= 0)
+            {
+                return BadRequest(new
+                {
+                    message = "Source bin ID must be valid."
+                });
+            }
+
+            await using var transaction =
                 await _context.Database.BeginTransactionAsync(
                     IsolationLevel.Serializable);
 
             try
             {
-                // 1. Load the putaway task.
-                var task = await _context.PutawayTasks
-                    .Include(p => p.Lot)
-                    .FirstOrDefaultAsync(p => p.PutawayId == id);
-
-                if (task == null)
-                    return NotFound("Putaway task not found.");
-
-                if (task.Status != "PENDING")
-                    return BadRequest(
-                        $"Only PENDING tasks can be completed. Current status: {task.Status}.");
-
-                if (task.Quantity <= 0)
-                    return BadRequest("Putaway quantity must be greater than zero.");
-
-                // 2. Load the associated goods receipt line.
                 var receiptLine = await _context.GoodsReceiptLines
                     .FirstOrDefaultAsync(r =>
-                        r.ReceiptLineId == task.ReceiptLineId);
+                        r.ReceiptLineId == dto.ReceiptLineId);
 
                 if (receiptLine == null)
-                    return BadRequest("Goods receipt line does not exist.");
+                {
+                    return NotFound(new
+                    {
+                        message = "Goods receipt line not found."
+                    });
+                }
 
-                if (receiptLine.LotId != task.LotId)
-                    return BadRequest(
-                        "The putaway lot does not match the goods receipt line.");
+                if (receiptLine.LotId != dto.LotId)
+                {
+                    return BadRequest(new
+                    {
+                        message = "The selected lot does not match the goods receipt line."
+                    });
+                }
 
-                // 3. Verify that the goods receipt is posted.
                 var goodsReceipt = await _context.GoodsReceipts
                     .FirstOrDefaultAsync(r =>
                         r.ReceiptId == receiptLine.ReceiptId);
@@ -125,55 +155,106 @@ namespace WMS.API.Controllers
                 if (goodsReceipt == null ||
                     goodsReceipt.Status != "POSTED")
                 {
-                    return BadRequest(
-                        "The associated goods receipt must be posted.");
+                    return BadRequest(new
+                    {
+                        message = "Goods receipt must be posted before creating a putaway task."
+                    });
                 }
 
-                // 4. Resolve the source bin.
-                // If FromBinId is null, use the receipt's receiving bin.
+                var lot = await _context.InventoryLots
+                    .FirstOrDefaultAsync(l =>
+                        l.LotId == dto.LotId);
+
+                if (lot == null)
+                {
+                    return NotFound(new
+                    {
+                        message = "Inventory lot not found."
+                    });
+                }
+
+                if (lot.ItemId != receiptLine.ItemId)
+                {
+                    return BadRequest(new
+                    {
+                        message = "The inventory lot item does not match the receipt line item."
+                    });
+                }
+
+                // Resolve the source bin.
+                // If no source bin is supplied, use the receiving bin.
                 long? effectiveFromBinId =
-                    task.FromBinId ?? receiptLine.ReceivingBinId;
+                    dto.FromBinId ?? receiptLine.ReceivingBinId;
 
                 if (!effectiveFromBinId.HasValue)
                 {
-                    return BadRequest(
-                        "A source bin is required to complete this putaway task.");
+                    return BadRequest(new
+                    {
+                        message = "A source bin is required. Select a source bin or assign a receiving bin to the receipt line."
+                    });
                 }
 
                 long fromBinId = effectiveFromBinId.Value;
 
-                // 5. Validate the source and destination bins.
+                if (fromBinId == dto.ToBinId)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Source and destination bins cannot be the same."
+                    });
+                }
+
                 var fromBin = await _context.StorageBins
                     .Include(b => b.Zone)
                     .FirstOrDefaultAsync(b =>
                         b.BinId == fromBinId &&
                         b.IsActive);
 
+                if (fromBin == null)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Source bin does not exist or is inactive."
+                    });
+                }
+
                 var toBin = await _context.StorageBins
                     .Include(b => b.Zone)
                     .FirstOrDefaultAsync(b =>
-                        b.BinId == task.ToBinId &&
+                        b.BinId == dto.ToBinId &&
                         b.IsActive);
 
-                if (fromBin == null || toBin == null)
-                    return BadRequest(
-                        "Source or destination bin does not exist or is inactive.");
-
-                if (fromBin.BinId == toBin.BinId)
-                    return BadRequest(
-                        "Source and destination bins cannot be the same.");
-
-                if (fromBin.Zone == null || toBin.Zone == null ||
-                    fromBin.Zone.WarehouseId != goodsReceipt.WarehouseId ||
-                    toBin.Zone.WarehouseId != goodsReceipt.WarehouseId)
+                if (toBin == null)
                 {
-                    return BadRequest(
-                        "Both bins must belong to the goods receipt warehouse.");
+                    return BadRequest(new
+                    {
+                        message = "Destination bin does not exist or is inactive."
+                    });
                 }
 
-                // 6. Determine the permitted inventory status.
-                // Pending quality lots must only move QUARANTINE stock.
-                string qualityStatus = task.Lot.QualityStatus.ToUpper();
+                if (fromBin.Zone == null || toBin.Zone == null)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Source and destination bins must belong to warehouse zones."
+                    });
+                }
+
+                if (fromBin.Zone.WarehouseId != goodsReceipt.WarehouseId ||
+                    toBin.Zone.WarehouseId != goodsReceipt.WarehouseId)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Source and destination bins must belong to the goods receipt warehouse."
+                    });
+                }
+
+                // Determine which inventory status is permitted
+                // based on the lot's quality status.
+                string qualityStatus =
+                    (lot.QualityStatus ?? string.Empty)
+                    .Trim()
+                    .ToUpperInvariant();
 
                 string requiredStockStatus;
 
@@ -187,16 +268,282 @@ namespace WMS.API.Controllers
                 }
                 else
                 {
-                    return BadRequest(
-                        $"Putaway is not permitted for lot quality status: {qualityStatus}.");
+                    return BadRequest(new
+                    {
+                        message = $"Putaway is not permitted for lot quality status: {qualityStatus}."
+                    });
                 }
 
-                // 7. Load only the appropriate stock-status balance.
+                // Verify inventory available in the resolved source bin.
+                decimal sourceAvailable =
+                    await _context.InventoryBalances
+                        .Where(b =>
+                            b.LotId == dto.LotId &&
+                            b.BinId == fromBinId &&
+                            b.StockStatus == requiredStockStatus)
+                        .SumAsync(b =>
+                            (decimal?)(b.QuantityOnHand -
+                                      b.QuantityReserved)) ?? 0m;
+
+                // Exclude quantities already allocated to pending
+                // putaway tasks from the same source bin.
+                decimal alreadyPending =
+                    await _context.PutawayTasks
+                        .Where(p =>
+                            p.LotId == dto.LotId &&
+                            p.Status == "PENDING" &&
+                            (p.FromBinId == fromBinId ||
+                             (!p.FromBinId.HasValue &&
+                              p.ReceiptLine.ReceivingBinId == fromBinId)))
+                        .SumAsync(p => (decimal?)p.Quantity) ?? 0m;
+
+                decimal remainingSource =
+                    sourceAvailable - alreadyPending;
+
+                if (dto.Quantity > remainingSource)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Putaway quantity exceeds available stock in the source bin.",
+                        sourceBinId = fromBinId,
+                        availableQuantity = sourceAvailable,
+                        alreadyAssignedQuantity = alreadyPending,
+                        remainingQuantity = remainingSource,
+                        requestedQuantity = dto.Quantity
+                    });
+                }
+
+                // Verify the remaining quantity on the receipt line.
+                decimal alreadyAssigned =
+                    await _context.PutawayTasks
+                        .Where(p =>
+                            p.ReceiptLineId == dto.ReceiptLineId &&
+                            p.Status != "CANCELLED")
+                        .SumAsync(p => (decimal?)p.Quantity) ?? 0m;
+
+                decimal remainingReceiptQuantity =
+                    receiptLine.ReceivedQuantity - alreadyAssigned;
+
+                if (dto.Quantity > remainingReceiptQuantity)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Putaway quantity exceeds the remaining receipt quantity.",
+                        receivedQuantity = receiptLine.ReceivedQuantity,
+                        alreadyAssignedQuantity = alreadyAssigned,
+                        remainingQuantity = remainingReceiptQuantity,
+                        requestedQuantity = dto.Quantity
+                    });
+                }
+
+                if (dto.AssignedTo.HasValue)
+                {
+                    bool userExists = await _context.AppUsers
+                        .AnyAsync(u =>
+                            u.UserId == dto.AssignedTo.Value);
+
+                    if (!userExists)
+                    {
+                        return BadRequest(new
+                        {
+                            message = "Assigned user does not exist."
+                        });
+                    }
+                }
+
+                var putawayTask = new PutawayTask
+                {
+                    ReceiptLineId = dto.ReceiptLineId,
+                    LotId = dto.LotId,
+                    FromBinId = dto.FromBinId,
+                    ToBinId = dto.ToBinId,
+                    Quantity = dto.Quantity,
+                    Status = "PENDING",
+                    AssignedTo = dto.AssignedTo
+                };
+
+                _context.PutawayTasks.Add(putawayTask);
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return CreatedAtAction(
+                    nameof(GetById),
+                    new { id = putawayTask.PutawayId },
+                    new
+                    {
+                        message = "Putaway task created successfully.",
+                        putawayId = putawayTask.PutawayId,
+                        receiptLineId = putawayTask.ReceiptLineId,
+                        lotId = putawayTask.LotId,
+                        fromBinId = fromBinId,
+                        toBinId = putawayTask.ToBinId,
+                        quantity = putawayTask.Quantity,
+                        assignedTo = putawayTask.AssignedTo,
+                        status = putawayTask.Status
+                    });
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        // POST: api/putaway-tasks/1/complete
+        [HttpPost("{id:long}/complete")]
+        public async Task<IActionResult> Complete(long id)
+        {
+            await using var transaction =
+                await _context.Database.BeginTransactionAsync(
+                    IsolationLevel.Serializable);
+
+            try
+            {
+                var task = await _context.PutawayTasks
+                    .Include(p => p.Lot)
+                    .FirstOrDefaultAsync(p =>
+                        p.PutawayId == id);
+
+                if (task == null)
+                {
+                    return NotFound(new
+                    {
+                        message = "Putaway task not found."
+                    });
+                }
+
+                if (task.Status != "PENDING")
+                {
+                    return BadRequest(new
+                    {
+                        message = $"Only PENDING tasks can be completed. Current status: {task.Status}."
+                    });
+                }
+
+                if (task.Quantity <= 0)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Putaway quantity must be greater than zero."
+                    });
+                }
+
+                var receiptLine = await _context.GoodsReceiptLines
+                    .FirstOrDefaultAsync(r =>
+                        r.ReceiptLineId == task.ReceiptLineId);
+
+                if (receiptLine == null)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Goods receipt line does not exist."
+                    });
+                }
+
+                if (receiptLine.LotId != task.LotId ||
+                    receiptLine.ItemId != task.Lot.ItemId)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Putaway lot does not match the goods receipt line."
+                    });
+                }
+
+                var goodsReceipt = await _context.GoodsReceipts
+                    .FirstOrDefaultAsync(r =>
+                        r.ReceiptId == receiptLine.ReceiptId);
+
+                if (goodsReceipt == null ||
+                    goodsReceipt.Status != "POSTED")
+                {
+                    return BadRequest(new
+                    {
+                        message = "The associated goods receipt must be posted."
+                    });
+                }
+
+                // Resolve the source bin using the same rule as creation.
+                long? effectiveFromBinId =
+                    task.FromBinId ?? receiptLine.ReceivingBinId;
+
+                if (!effectiveFromBinId.HasValue)
+                {
+                    return BadRequest(new
+                    {
+                        message = "A source bin is required to complete this putaway task."
+                    });
+                }
+
+                long fromBinId = effectiveFromBinId.Value;
+
+                if (fromBinId == task.ToBinId)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Source and destination bins cannot be the same."
+                    });
+                }
+
+                var fromBin = await _context.StorageBins
+                    .Include(b => b.Zone)
+                    .FirstOrDefaultAsync(b =>
+                        b.BinId == fromBinId &&
+                        b.IsActive);
+
+                var toBin = await _context.StorageBins
+                    .Include(b => b.Zone)
+                    .FirstOrDefaultAsync(b =>
+                        b.BinId == task.ToBinId &&
+                        b.IsActive);
+
+                if (fromBin == null || toBin == null)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Source or destination bin does not exist or is inactive."
+                    });
+                }
+
+                if (fromBin.Zone == null || toBin.Zone == null ||
+                    fromBin.Zone.WarehouseId != goodsReceipt.WarehouseId ||
+                    toBin.Zone.WarehouseId != goodsReceipt.WarehouseId)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Both bins must belong to the goods receipt warehouse."
+                    });
+                }
+
+                string qualityStatus =
+                    (task.Lot.QualityStatus ?? string.Empty)
+                    .Trim()
+                    .ToUpperInvariant();
+
+                string requiredStockStatus;
+
+                if (qualityStatus == "PENDING")
+                {
+                    requiredStockStatus = "QUARANTINE";
+                }
+                else if (qualityStatus == "APPROVED")
+                {
+                    requiredStockStatus = "AVAILABLE";
+                }
+                else
+                {
+                    return BadRequest(new
+                    {
+                        message = $"Putaway is not permitted for lot quality status: {qualityStatus}."
+                    });
+                }
+
                 var sourceBalances = await _context.InventoryBalances
                     .Where(b =>
                         b.LotId == task.LotId &&
                         b.BinId == fromBinId &&
                         b.StockStatus == requiredStockStatus)
+                    .OrderBy(b => b.BalanceId)
                     .ToListAsync();
 
                 decimal totalAvailable = sourceBalances.Sum(b =>
@@ -204,13 +551,14 @@ namespace WMS.API.Controllers
 
                 if (totalAvailable < task.Quantity)
                 {
-                    return BadRequest(
-                        $"Insufficient {requiredStockStatus} stock. " +
-                        $"Available: {totalAvailable}, Required: {task.Quantity}.");
+                    return BadRequest(new
+                    {
+                        message = $"Insufficient {requiredStockStatus} stock in the source bin.",
+                        availableQuantity = totalAvailable,
+                        requestedQuantity = task.Quantity
+                    });
                 }
 
-                // 8. Create the inventory transaction.
-                // TRANSFER is an existing allowed transaction type.
                 DateTime now = DateTime.UtcNow;
 
                 var inventoryTransaction = new InventoryTransaction
@@ -228,28 +576,29 @@ namespace WMS.API.Controllers
 
                 decimal remainingQuantity = task.Quantity;
 
-                // 9. Move inventory while preserving its stock status.
                 foreach (var sourceBalance in sourceBalances)
                 {
                     if (remainingQuantity <= 0)
+                    {
                         break;
+                    }
 
                     decimal availableQuantity =
                         sourceBalance.QuantityOnHand -
                         sourceBalance.QuantityReserved;
 
                     if (availableQuantity <= 0)
+                    {
                         continue;
+                    }
 
                     decimal quantityToMove = Math.Min(
                         availableQuantity,
                         remainingQuantity);
 
-                    // Deduct from source.
                     sourceBalance.QuantityOnHand -= quantityToMove;
                     sourceBalance.UpdatedAt = now;
 
-                    // Find or create the destination balance.
                     var destinationBalance =
                         await _context.InventoryBalances
                             .FirstOrDefaultAsync(b =>
@@ -277,7 +626,6 @@ namespace WMS.API.Controllers
                         destinationBalance.UpdatedAt = now;
                     }
 
-                    // Record the inventory movement.
                     _context.InventoryTransactionLines.Add(
                         new InventoryTransactionLine
                         {
@@ -297,19 +645,19 @@ namespace WMS.API.Controllers
 
                 if (remainingQuantity > 0)
                 {
-                    await dbTransaction.RollbackAsync();
-
-                    return BadRequest(
-                        "Unable to complete putaway because the source stock was insufficient.");
+                    return BadRequest(new
+                    {
+                        message = "Unable to complete putaway because the source stock was insufficient.",
+                        remainingQuantity
+                    });
                 }
 
-                // 10. Save the resolved source bin and complete the task.
                 task.FromBinId = fromBinId;
                 task.Status = "COMPLETED";
                 task.CompletedAt = now;
 
                 await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
+                await transaction.CommitAsync();
 
                 return Ok(new
                 {
@@ -322,6 +670,7 @@ namespace WMS.API.Controllers
                     quantityMoved = task.Quantity,
                     stockStatus = requiredStockStatus,
                     status = task.Status,
+                    completedAt = task.CompletedAt,
                     inventoryTransactionId =
                         inventoryTransaction.TransactionId,
                     transactionNumber =
@@ -330,7 +679,7 @@ namespace WMS.API.Controllers
             }
             catch (Exception ex)
             {
-                await dbTransaction.RollbackAsync();
+                await transaction.RollbackAsync();
 
                 return StatusCode(500, new
                 {
@@ -338,221 +687,6 @@ namespace WMS.API.Controllers
                     error = ex.InnerException?.Message ?? ex.Message
                 });
             }
-        }
-
-
-        // GET: api/putaway-tasks/1
-        [HttpGet("{id:long}")]
-        public async Task<IActionResult> GetById(long id)
-        {
-            var task = await _context.PutawayTasks
-                .Include(p => p.ReceiptLine)
-                    .ThenInclude(r => r.Item)
-                .Include(p => p.Lot)
-                .Include(p => p.FromBin)
-                .Include(p => p.ToBin)
-                .FirstOrDefaultAsync(p => p.PutawayId == id);
-
-            if (task == null)
-                return NotFound("Putaway task not found.");
-
-            return Ok(new
-            {
-                task.PutawayId,
-                task.ReceiptLineId,
-                task.LotId,
-                task.Lot.BatchCode,
-                ItemCode = task.ReceiptLine.Item.ItemCode,
-                ItemName = task.ReceiptLine.Item.ItemName,
-                task.FromBinId,
-                FromBinCode = task.FromBin?.BinCode,
-                task.ToBinId,
-                ToBinCode = task.ToBin.BinCode,
-                task.Quantity,
-                task.Status,
-                task.AssignedTo,
-                task.CompletedAt
-            });
-        }
-
-        [HttpGet("debug-database")]
-        public async Task<IActionResult> DebugDatabase()
-        {
-            var connection = _context.Database.GetDbConnection();
-
-            await _context.Database.OpenConnectionAsync();
-
-            try
-            {
-                await using var command = connection.CreateCommand();
-                command.CommandText = @"
-            SELECT
-                current_database(),
-                current_schema(),
-                current_setting('search_path');
-        ";
-
-                await using var reader = await command.ExecuteReaderAsync();
-                await reader.ReadAsync();
-
-                return Ok(new
-                {
-                    Database = reader.GetString(0),
-                    Schema = reader.IsDBNull(1) ? null : reader.GetString(1),
-                    SearchPath = reader.GetString(2)
-                });
-            }
-            finally
-            {
-                await _context.Database.CloseConnectionAsync();
-            }
-        }
-
-        // POST: api/putaway-tasks
-        [HttpPost]
-        public async Task<IActionResult> Create(
-            CreatePutawayTaskDto dto)
-        {
-            if (dto.Quantity <= 0)
-                return BadRequest(
-                    "Quantity must be greater than zero.");
-
-            var receiptLine = await _context.GoodsReceiptLines
-                .FirstOrDefaultAsync(r =>
-                    r.ReceiptLineId == dto.ReceiptLineId);
-
-            if (receiptLine == null)
-                return BadRequest("Goods receipt line does not exist.");
-
-            var goodsReceipt = await _context.GoodsReceipts
-                .FirstOrDefaultAsync(r =>
-                    r.ReceiptId == receiptLine.ReceiptId);
-
-            if (goodsReceipt == null || goodsReceipt.Status != "POSTED")
-            {
-                return BadRequest(
-                    "Goods receipt must be posted before creating a putaway task.");
-            }
-
-            if (receiptLine.LotId != dto.LotId)
-                return BadRequest(
-                    "The selected lot does not match the receipt line.");
-
-            var toBin = await _context.StorageBins
-                .Include(b => b.Zone)
-                .FirstOrDefaultAsync(b =>
-                    b.BinId == dto.ToBinId && b.IsActive);
-
-            if (toBin == null)
-                return BadRequest(
-                    "Destination bin does not exist or is inactive.");
-
-            if (toBin.Zone == null)
-                return BadRequest(
-                    "Destination bin has no assigned warehouse zone.");
-
-            if (toBin.Zone.WarehouseId !=
-                goodsReceipt.WarehouseId)
-            {
-                return BadRequest(
-                    "Destination bin must belong to the receipt warehouse.");
-            }
-
-            if (dto.FromBinId.HasValue)
-            {
-                if (dto.FromBinId.Value == dto.ToBinId)
-                    return BadRequest(
-                        "Source and destination bins cannot be the same.");
-
-                var fromBin = await _context.StorageBins
-                    .Include(b => b.Zone)
-                    .FirstOrDefaultAsync(b =>
-                        b.BinId == dto.FromBinId.Value && b.IsActive);
-
-                if (fromBin == null)
-                    return BadRequest(
-                        "Source bin does not exist or is inactive.");
-
-                if (fromBin.Zone == null ||
-                    fromBin.Zone.WarehouseId != toBin.Zone.WarehouseId)
-                {
-                    return BadRequest(
-                        "Source and destination bins must belong to the same warehouse.");
-                }
-
-                // Verify available inventory in the source bin.
-                decimal sourceAvailable = await _context.InventoryBalances
-                    .Where(b =>
-                        b.LotId == dto.LotId &&
-                        b.BinId == dto.FromBinId.Value)
-                    .SumAsync(b =>
-                        (decimal?)(b.QuantityOnHand - b.QuantityReserved))
-                    ?? 0;
-
-                // Include existing pending tasks to avoid over-assignment.
-                decimal alreadyPending = await _context.PutawayTasks
-                    .Where(p =>
-                        p.LotId == dto.LotId &&
-                        p.FromBinId == dto.FromBinId.Value &&
-                        p.Status == "PENDING")
-                    .SumAsync(p => (decimal?)p.Quantity) ?? 0;
-
-                decimal remainingSource =
-                    sourceAvailable - alreadyPending;
-
-                if (dto.Quantity > remainingSource)
-                    return BadRequest(
-                        $"Insufficient available stock in source bin. Available: {remainingSource}.");
-            }
-
-            decimal alreadyAssigned = await _context.PutawayTasks
-                .Where(p =>
-                    p.ReceiptLineId == dto.ReceiptLineId &&
-                    p.Status != "CANCELLED")
-                .SumAsync(p => (decimal?)p.Quantity) ?? 0;
-
-            decimal remainingQuantity =
-                receiptLine.ReceivedQuantity - alreadyAssigned;
-
-            if (dto.Quantity > remainingQuantity)
-                return BadRequest(
-                    $"Putaway quantity exceeds remaining receipt quantity. Remaining: {remainingQuantity}.");
-
-            if (dto.AssignedTo.HasValue)
-            {
-                bool userExists = await _context.AppUsers
-                    .AnyAsync(u =>
-                        u.UserId == dto.AssignedTo.Value);
-
-                if (!userExists)
-                    return BadRequest(
-                        "Assigned user does not exist.");
-            }
-
-            var putawayTask = new PutawayTask
-            {
-                ReceiptLineId = dto.ReceiptLineId,
-                LotId = dto.LotId,
-                FromBinId = dto.FromBinId,
-                ToBinId = dto.ToBinId,
-                Quantity = dto.Quantity,
-                Status = "PENDING",
-                AssignedTo = dto.AssignedTo
-            };
-
-            _context.PutawayTasks.Add(putawayTask);
-
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(
-                nameof(GetById),
-                new { id = putawayTask.PutawayId },
-                new
-                {
-                    message = "Putaway task created successfully.",
-                    putawayId = putawayTask.PutawayId,
-                    status = putawayTask.Status
-                });
         }
     }
 }

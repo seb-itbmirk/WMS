@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from 'react'
 import api from '../services/api'
 
@@ -6,6 +5,7 @@ export default function ItemsPage() {
     const [items, setItems] = useState([])
     const [categories, setCategories] = useState([])
     const [loading, setLoading] = useState(true)
+    const [itemsLoadError, setItemsLoadError] = useState(false)
     const [error, setError] = useState('')
     const [success, setSuccess] = useState('')
 
@@ -17,20 +17,48 @@ export default function ItemsPage() {
         try {
             setLoading(true)
             setError('')
+            setItemsLoadError(false)
 
-            const [itemsResponse, categoriesResponse] = await Promise.all([
+            const results = await Promise.allSettled([
                 api.get('/items'),
                 api.get('/item-categories')
             ])
 
-            setItems(itemsResponse.data)
-            setCategories(categoriesResponse.data)
-        } catch (err) {
-            setError(
-                err.response?.data?.message ||
-                err.response?.data?.title ||
-                'Failed to load items and categories.'
-            )
+            const [itemsResult, categoriesResult] = results
+            const loadErrors = []
+
+            if (itemsResult.status === 'fulfilled') {
+                setItems(itemsResult.value.data)
+                setItemsLoadError(false)
+            } else {
+                setItemsLoadError(true)
+                console.error('Unable to load items:', itemsResult.reason)
+
+                loadErrors.push(
+                    itemsResult.reason.response?.data?.message ||
+                    itemsResult.reason.response?.data?.title ||
+                    'Failed to load items.'
+                )
+            }
+
+            if (categoriesResult.status === 'fulfilled') {
+                setCategories(categoriesResult.value.data)
+            } else {
+                console.error(
+                    'Unable to load item categories:',
+                    categoriesResult.reason
+                )
+
+                loadErrors.push(
+                    categoriesResult.reason.response?.data?.message ||
+                    categoriesResult.reason.response?.data?.title ||
+                    'Failed to load item categories.'
+                )
+            }
+
+            if (loadErrors.length > 0) {
+                setError(loadErrors.join(' '))
+            }
         } finally {
             setLoading(false)
         }
@@ -96,7 +124,9 @@ export default function ItemsPage() {
                 <div>
                     <p className="items-eyebrow">MASTER DATA MANAGEMENT</p>
                     <h1>Items & Materials</h1>
-                    <p>Manage raw materials, packaging materials, and finished goods.</p>
+                    <p>
+                        Manage raw materials, packaging materials, and finished goods.
+                    </p>
                 </div>
             </div>
 
@@ -147,7 +177,10 @@ export default function ItemsPage() {
                         <p>{filteredItems.length} matching records</p>
                     </div>
 
-                    <button className="items-refresh-button" onClick={loadData}>
+                    <button
+                        className="items-refresh-button"
+                        onClick={loadData}
+                    >
                         ↻ Refresh
                     </button>
                 </div>
@@ -171,6 +204,7 @@ export default function ItemsPage() {
                             onChange={event => setCategoryFilter(event.target.value)}
                         >
                             <option value="ALL">All categories</option>
+
                             {categories.map(category => (
                                 <option
                                     key={category.categoryId}
@@ -221,6 +255,13 @@ export default function ItemsPage() {
                                         Loading item catalog...
                                     </td>
                                 </tr>
+                            ) : itemsLoadError ? (
+                                <tr>
+                                    <td colSpan="9" className="items-empty">
+                                        Unable to load item records. Check the error
+                                        message above and refresh.
+                                    </td>
+                                </tr>
                             ) : filteredItems.length === 0 ? (
                                 <tr>
                                     <td colSpan="9" className="items-empty">
@@ -233,32 +274,43 @@ export default function ItemsPage() {
                                         <td>
                                             <strong>{item.itemCode}</strong>
                                         </td>
+
                                         <td>
                                             <div className="items-name">
                                                 <strong>{item.itemName}</strong>
+
                                                 {item.description && (
                                                     <small>{item.description}</small>
                                                 )}
                                             </div>
                                         </td>
+
                                         <td>{item.categoryName || '—'}</td>
                                         <td>{item.uomCode || '—'}</td>
                                         <td>{item.stockRotationMethod || '—'}</td>
+
                                         <td>
                                             {item.requiresExpiry ? 'Required' : 'No'}
                                         </td>
+
                                         <td>
-                                            {item.requiresQualityInspection ? 'Required' : 'No'}
+                                            {item.requiresQualityInspection
+                                                ? 'Required'
+                                                : 'No'}
                                         </td>
+
                                         <td>
                                             <span
                                                 className={`items-status ${
-                                                    item.isActive ? 'active' : 'inactive'
+                                                    item.isActive
+                                                        ? 'active'
+                                                        : 'inactive'
                                                 }`}
                                             >
                                                 {item.isActive ? 'Active' : 'Inactive'}
                                             </span>
                                         </td>
+
                                         <td>
                                             {item.isActive ? (
                                                 <button
@@ -268,7 +320,9 @@ export default function ItemsPage() {
                                                     Deactivate
                                                 </button>
                                             ) : (
-                                                <span className="items-no-action">—</span>
+                                                <span className="items-no-action">
+                                                    —
+                                                </span>
                                             )}
                                         </td>
                                     </tr>

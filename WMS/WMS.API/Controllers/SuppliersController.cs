@@ -63,5 +63,37 @@ namespace WMS.API.Controllers
 
             return Ok(suppliers);
         }
+
+        // GET: api/suppliers/5
+        [HttpGet("{id:long}")]
+        public async Task<IActionResult> GetById(long id)
+        {
+            var supplier = await _context.Suppliers
+                .AsNoTracking()
+                .Where(s => s.SupplierId == id)
+                .Select(s => new
+                {
+                    s.SupplierId,
+                    s.SupplierCode,
+                    s.SupplierName,
+                    s.ContactPerson,
+                    s.Phone,
+                    s.Email,
+                    s.Address,
+                    s.IsActive,
+                    s.CreatedAt
+                })
+                .FirstOrDefaultAsync();
+
+            if (supplier == null)
+            {
+                return NotFound(new
+                {
+                    message = $"Supplier with ID {id} was not found."
+                });
+            }
+
+            return Ok(supplier);
+        }
     }
 }

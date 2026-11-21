@@ -415,69 +415,83 @@ export default function GoodsReceiptsPage() {
         }
     }
 
-    function addReceiptLine() {
-        const item = getItem(newLine.itemId)
-        const lot = getLot(newLine.lotId)
 
-        if (!newLine.itemId || !newLine.lotId || !newLine.uomId) {
-            showError('Select an item, inventory lot, and UOM.')
-            return
-        }
+function addReceiptLine() {
+    const item = getItem(newLine.itemId)
+    const lot = getLot(newLine.lotId)
 
-        if (!newLine.receivedQuantity || Number(newLine.receivedQuantity) <= 0) {
-            showError('Received quantity must be greater than zero.')
-            return
-        }
-
-        if (!newLine.receivingBinId) {
-            showError('Select a receiving bin for this receipt line.')
-            return
-        }
-
-        if (!item || !lot) {
-            showError('The selected item or inventory lot could not be found.')
-            return
-        }
-
-        if (Number(lot.itemId) !== Number(item.itemId)) {
-            showError('The selected lot does not belong to this item.')
-            return
-        }
-
-        if (Number(newLine.uomId) !== Number(item.baseUomId)) {
-            showError('Goods receipt quantity must use the item base UOM.')
-            return
-        }
-
-        const selectedPoLine = poLines.find(
-            line => Number(line.poLineId) === Number(newLine.poLineId)
-        )
-
-        if (header.purchaseOrderId && !selectedPoLine && newLine.poLineId) {
-            showError('The selected PO line is invalid.')
-            return
-        }
-
-        const line = {
-            ...newLine,
-            itemId: Number(newLine.itemId),
-            lotId: Number(newLine.lotId),
-            receivedQuantity: Number(newLine.receivedQuantity),
-            uomId: Number(newLine.uomId),
-            receivingBinId: Number(newLine.receivingBinId),
-            poLineId: newLine.poLineId
-                ? Number(newLine.poLineId)
-                : null,
-            itemCode: item.itemCode,
-            itemName: item.itemName,
-            batchCode: lot.batchCode,
-            uomCode: getUom(newLine.uomId)?.uomCode || ''
-        }
-
-        setLines(prev => [...prev, line])
-        setNewLine(emptyLine)
-        showMessage('Receipt line added.')
+    if (!newLine.itemId || !newLine.lotId || !newLine.uomId) {
+        showError('Select an item, inventory lot, and UOM.')
+        return
     }
+
+    if (!newLine.receivedQuantity || Number(newLine.receivedQuantity) <= 0) {
+        showError('Received quantity must be greater than zero.')
+        return
+    }
+
+    if (!newLine.receivingBinId) {
+        showError('Select a receiving bin for this receipt line.')
+        return
+    }
+
+    if (!item || !lot) {
+        showError('The selected item or inventory lot could not be found.')
+        return
+    }
+
+    if (Number(lot.itemId) !== Number(item.itemId)) {
+        showError('The selected lot does not belong to this item.')
+        return
+    }
+
+    if (Number(newLine.uomId) !== Number(item.baseUomId)) {
+        showError('Goods receipt quantity must use the item base UOM.')
+        return
+    }
+
+    const selectedPoLine = poLines.find(
+        line => Number(line.poLineId) === Number(newLine.poLineId)
+    )
+
+    if (header.purchaseOrderId && newLine.poLineId && !selectedPoLine) {
+        showError('The selected PO line is invalid.')
+        return
+    }
+
+    if (selectedPoLine) {
+        if (Number(selectedPoLine.itemId) !== Number(newLine.itemId)) {
+            showError('The selected PO line belongs to a different item.')
+            return
+        }
+
+        if (Number(selectedPoLine.uomId) !== Number(newLine.uomId)) {
+            showError('The selected PO line uses a different UOM.')
+            return
+        }
+    }
+
+    const line = {
+        ...newLine,
+        itemId: Number(newLine.itemId),
+        lotId: Number(newLine.lotId),
+        receivedQuantity: Number(newLine.receivedQuantity),
+        uomId: Number(newLine.uomId),
+        receivingBinId: Number(newLine.receivingBinId),
+        poLineId: newLine.poLineId
+            ? Number(newLine.poLineId)
+            : null,
+        itemCode: item.itemCode,
+        itemName: item.itemName,
+        batchCode: lot.batchCode,
+        uomCode: getUom(newLine.uomId)?.uomCode || ''
+    }
+
+    setLines(prev => [...prev, line])
+    setNewLine(emptyLine)
+    showMessage('Receipt line added.')
+}
+
 
     function removeReceiptLine(index) {
         setLines(prev => prev.filter((_, i) => i !== index))

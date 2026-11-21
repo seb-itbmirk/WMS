@@ -2,8 +2,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WMS.API.Data;
-using WMS.API.Models;
 using WMS.API.DTOs.StockCounts;
+using WMS.API.Models;
 
 namespace WMS.API.Controllers
 {
@@ -23,8 +23,9 @@ namespace WMS.API.Controllers
         public async Task<IActionResult> GetStockCounts()
         {
             var counts = await _context.StockCounts
-                .Include(sc => sc.Warehouse)
+                .AsNoTracking()
                 .OrderByDescending(sc => sc.CountDate)
+                .ThenByDescending(sc => sc.StockCountId)
                 .Select(sc => new
                 {
                     sc.StockCountId,
@@ -44,50 +45,51 @@ namespace WMS.API.Controllers
         [HttpGet("{id:long}")]
         public async Task<IActionResult> GetStockCount(long id)
         {
+            if (id <= 0)
+                return BadRequest("A valid stock count ID is required.");
+
             var count = await _context.StockCounts
-                .Include(sc => sc.Warehouse)
-                .Include(sc => sc.StockCountLines)
-                    .ThenInclude(line => line.Lot)
-                        .ThenInclude(lot => lot.Item)
-                .Include(sc => sc.StockCountLines)
-                    .ThenInclude(line => line.Bin)
-                .Include(sc => sc.StockCountLines)
-                    .ThenInclude(line => line.CountedByNavigation)
-                .FirstOrDefaultAsync(sc => sc.StockCountId == id);
+                .AsNoTracking()
+                .Where(sc => sc.StockCountId == id)
+                .Select(sc => new
+                {
+                    sc.StockCountId,
+                    sc.CountNumber,
+                    sc.WarehouseId,
+                    WarehouseName = sc.Warehouse.WarehouseName,
+                    sc.CountDate,
+                    sc.Status,
+                    sc.CreatedBy,
+                    Lines = sc.StockCountLines
+                        .OrderBy(line => line.StockCountLineId)
+                        .Select(line => new
+                        {
+                            line.StockCountLineId,
+                            line.LotId,
+                            line.Lot.BatchCode,
+                            line.Lot.Item.ItemCode,
+                            line.Lot.Item.ItemName,
+                            line.BinId,
+                            line.Bin.BinCode,
+                            line.SystemQuantity,
+                            line.CountedQuantity,
+                            line.CountedBy,
+                            CountedByName = line.CountedByNavigation == null
+                                ? null
+                                : line.CountedByNavigation.Username,
+                            line.CountedAt,
+                            DifferenceQuantity = line.CountedQuantity.HasValue
+                                ? line.CountedQuantity.Value - line.SystemQuantity
+                                : (decimal?)null
+                        })
+                        .ToList()
+                })
+                .FirstOrDefaultAsync();
 
             if (count == null)
                 return NotFound("Stock count not found.");
 
-            var result = new
-            {
-                count.StockCountId,
-                count.CountNumber,
-                count.WarehouseId,
-                WarehouseName = count.Warehouse.WarehouseName,
-                count.CountDate,
-                count.Status,
-                count.CreatedBy,
-
-                Lines = count.StockCountLines.Select(line => new
-                {
-                    line.StockCountLineId,
-                    line.LotId,
-                    line.Lot.BatchCode,
-                    line.Lot.Item.ItemCode,
-                    line.Lot.Item.ItemName,
-                    line.BinId,
-                    line.Bin.BinCode,
-                    line.SystemQuantity,
-                    line.CountedQuantity,
-                    line.CountedBy,
-                    CountedByName = line.CountedByNavigation == null
-                        ? null
-                        : line.CountedByNavigation.Username,
-                    line.CountedAt
-                })
-            };
-
-            return Ok(result);
+            return Ok(count);
         }
 
         // POST: api/stock-counts
@@ -95,46 +97,55 @@ namespace WMS.API.Controllers
         public async Task<IActionResult> CreateStockCount(
             [FromBody] CreateStockCountDto dto)
         {
+            if (dto == null)
+                return BadRequest("Stock count details are required.");
+
             if (string.IsNullOrWhiteSpace(dto.CountNumber))
                 return BadRequest("Count number is required.");
 
-            if (dto.WarehouseId <= 0)
-                return BadRequest("Valid warehouse is required.");
-
             string countNumber = dto.CountNumber.Trim();
 
-            if (await _context.StockCounts.AnyAsync(
-                sc => sc.CountNumber == countNumber))
-            {
-                return Conflict("Count number already exists.");
-            }
+            if (countNumber.Length > 50)
+                return BadRequest("Count number cannot exceed 50 characters.");
 
-            var warehouse = await _context.Warehouses
-                .FirstOrDefaultAsync(w =>
+            if (dto.WarehouseId <= 0)
+                return BadRequest("A valid warehouse is required.");
+
+            if (dto.CountDate == default)
+                return BadRequest("A valid count date is required.");
+
+            var warehouseExists = await _context.Warehouses
+                .AsNoTracking()
+                .AnyAsync(w =>
                     w.WarehouseId == dto.WarehouseId &&
                     w.IsActive);
 
-            if (warehouse == null)
+            if (!warehouseExists)
                 return BadRequest("Active warehouse not found.");
 
             if (dto.CreatedBy.HasValue)
             {
                 var userExists = await _context.AppUsers
+                    .AsNoTracking()
                     .AnyAsync(u => u.UserId == dto.CreatedBy.Value);
 
                 if (!userExists)
                     return BadRequest("Created by user does not exist.");
             }
 
-            if (dto.CountDate == default)
-                return BadRequest("Valid count date is required.");
+            var numberExists = await _context.StockCounts
+                .AnyAsync(sc => sc.CountNumber == countNumber);
+
+            if (numberExists)
+                return Conflict("Count number already exists.");
 
             var count = new StockCount
             {
                 CountNumber = countNumber,
                 WarehouseId = dto.WarehouseId,
                 CountDate = DateTime.SpecifyKind(
-                    dto.CountDate, DateTimeKind.Utc),
+                    dto.CountDate,
+                    DateTimeKind.Utc),
                 Status = "OPEN",
                 CreatedBy = dto.CreatedBy
             };
@@ -156,13 +167,10 @@ namespace WMS.API.Controllers
                         count.Status
                     });
             }
-            catch (DbUpdateException ex)
+            catch (DbUpdateException)
             {
-                return BadRequest(new
-                {
-                    Message = "Database error while creating stock count.",
-                    Error = ex.InnerException?.Message ?? ex.Message
-                });
+                return Conflict(
+                    "Unable to create stock count. Check whether the count number already exists.");
             }
         }
 
@@ -172,74 +180,89 @@ namespace WMS.API.Controllers
             long id,
             [FromBody] AddStockCountLineDto dto)
         {
-            var count = await _context.StockCounts
-                .Include(sc => sc.StockCountLines)
-                .FirstOrDefaultAsync(sc => sc.StockCountId == id);
+            if (id <= 0)
+                return BadRequest("A valid stock count ID is required.");
 
-            if (count == null)
-                return NotFound("Stock count not found.");
-
-            if (count.Status != "OPEN" &&
-                count.Status != "IN_PROGRESS")
-            {
-                return BadRequest(
-                    "Lines can only be added to OPEN or IN_PROGRESS stock counts.");
-            }
+            if (dto == null)
+                return BadRequest("Stock count line details are required.");
 
             if (dto.LotId <= 0 || dto.BinId <= 0)
                 return BadRequest("Valid lot and bin are required.");
 
-            var bin = await _context.StorageBins
-                .Include(b => b.Zone)
-                .FirstOrDefaultAsync(b =>
-                    b.BinId == dto.BinId &&
-                    b.IsActive &&
-                    b.Zone.WarehouseId == count.WarehouseId);
-
-            if (bin == null)
-                return BadRequest(
-                    "Active bin does not belong to the selected warehouse.");
-
-            var lot = await _context.InventoryLots
-                .Include(l => l.Item)
-                .FirstOrDefaultAsync(l => l.LotId == dto.LotId);
-
-            if (lot == null)
-                return BadRequest("Inventory lot not found.");
-
-            if (count.StockCountLines.Any(line =>
-                line.LotId == dto.LotId &&
-                line.BinId == dto.BinId))
-            {
-                return Conflict(
-                    "This lot and bin already exist in the stock count.");
-            }
-
-            var balance = await _context.InventoryBalances
-                .FirstOrDefaultAsync(b =>
-                    b.LotId == dto.LotId &&
-                    b.BinId == dto.BinId &&
-                    b.StockStatus == "AVAILABLE");
-
-            decimal systemQuantity =
-                balance?.QuantityOnHand ?? 0;
-
-            var line = new StockCountLine
-            {
-                StockCountId = id,
-                LotId = dto.LotId,
-                BinId = dto.BinId,
-                SystemQuantity = systemQuantity
-            };
+            await using var transaction =
+                await _context.Database.BeginTransactionAsync();
 
             try
             {
+                var count = await LockStockCountAsync(id);
+
+                if (count == null)
+                    return NotFound("Stock count not found.");
+
+                if (count.Status != "OPEN" &&
+                    count.Status != "IN_PROGRESS")
+                {
+                    return BadRequest(
+                        "Lines can only be added to OPEN or IN_PROGRESS stock counts.");
+                }
+
+                var bin = await _context.StorageBins
+                    .Include(b => b.Zone)
+                    .FirstOrDefaultAsync(b =>
+                        b.BinId == dto.BinId &&
+                        b.IsActive &&
+                        b.Zone.WarehouseId == count.WarehouseId);
+
+                if (bin == null)
+                {
+                    return BadRequest(
+                        "Active bin does not belong to the selected warehouse.");
+                }
+
+                var lot = await _context.InventoryLots
+                    .Include(l => l.Item)
+                    .FirstOrDefaultAsync(l => l.LotId == dto.LotId);
+
+                if (lot == null)
+                    return BadRequest("Inventory lot not found.");
+
+                var duplicate = await _context.StockCountLines
+                    .AnyAsync(line =>
+                        line.StockCountId == id &&
+                        line.LotId == dto.LotId &&
+                        line.BinId == dto.BinId);
+
+                if (duplicate)
+                {
+                    return Conflict(
+                        "This lot and bin already exist in the stock count.");
+                }
+
+                var balance = await _context.InventoryBalances
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(b =>
+                        b.LotId == dto.LotId &&
+                        b.BinId == dto.BinId &&
+                        b.StockStatus == "AVAILABLE");
+
+                decimal systemQuantity =
+                    balance?.QuantityOnHand ?? 0;
+
+                var line = new StockCountLine
+                {
+                    StockCountId = id,
+                    LotId = dto.LotId,
+                    BinId = dto.BinId,
+                    SystemQuantity = systemQuantity
+                };
+
                 _context.StockCountLines.Add(line);
 
                 if (count.Status == "OPEN")
                     count.Status = "IN_PROGRESS";
 
                 await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
 
                 return Ok(new
                 {
@@ -256,13 +279,17 @@ namespace WMS.API.Controllers
                     count.Status
                 });
             }
-            catch (DbUpdateException ex)
+            catch (DbUpdateException)
             {
-                return BadRequest(new
-                {
-                    Message = "Database error while adding stock count line.",
-                    Error = ex.InnerException?.Message ?? ex.Message
-                });
+                await transaction.RollbackAsync();
+
+                return Conflict(
+                    "Unable to add stock count line. Check for duplicate lot and bin entries.");
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
             }
         }
 
@@ -273,46 +300,56 @@ namespace WMS.API.Controllers
             long lineId,
             [FromBody] RecordStockCountDto dto)
         {
-            var count = await _context.StockCounts
-                .FirstOrDefaultAsync(sc => sc.StockCountId == id);
+            if (id <= 0 || lineId <= 0)
+                return BadRequest("Valid stock count and line IDs are required.");
 
-            if (count == null)
-                return NotFound("Stock count not found.");
-
-            if (count.Status != "OPEN" &&
-                count.Status != "IN_PROGRESS")
-            {
-                return BadRequest(
-                    "Physical counts can only be recorded for OPEN or IN_PROGRESS stock counts.");
-            }
-
-            var line = await _context.StockCountLines
-                .FirstOrDefaultAsync(line =>
-                    line.StockCountLineId == lineId &&
-                    line.StockCountId == id);
-
-            if (line == null)
-                return NotFound("Stock count line not found.");
+            if (dto == null)
+                return BadRequest("Physical count details are required.");
 
             if (dto.CountedQuantity < 0)
                 return BadRequest("Counted quantity cannot be negative.");
 
-            if (dto.CountedBy.HasValue)
-            {
-                var userExists = await _context.AppUsers
-                    .AnyAsync(u => u.UserId == dto.CountedBy.Value);
-
-                if (!userExists)
-                    return BadRequest("Counted by user does not exist.");
-            }
-
-            line.CountedQuantity = dto.CountedQuantity;
-            line.CountedBy = dto.CountedBy;
-            line.CountedAt = DateTime.UtcNow;
+            await using var transaction =
+                await _context.Database.BeginTransactionAsync();
 
             try
             {
+                var count = await LockStockCountAsync(id);
+
+                if (count == null)
+                    return NotFound("Stock count not found.");
+
+                if (count.Status != "OPEN" &&
+                    count.Status != "IN_PROGRESS")
+                {
+                    return BadRequest(
+                        "Physical counts can only be recorded for OPEN or IN_PROGRESS stock counts.");
+                }
+
+                var line = await _context.StockCountLines
+                    .FirstOrDefaultAsync(line =>
+                        line.StockCountLineId == lineId &&
+                        line.StockCountId == id);
+
+                if (line == null)
+                    return NotFound("Stock count line not found.");
+
+                if (dto.CountedBy.HasValue)
+                {
+                    var userExists = await _context.AppUsers
+                        .AsNoTracking()
+                        .AnyAsync(u => u.UserId == dto.CountedBy.Value);
+
+                    if (!userExists)
+                        return BadRequest("Counted by user does not exist.");
+                }
+
+                line.CountedQuantity = dto.CountedQuantity;
+                line.CountedBy = dto.CountedBy;
+                line.CountedAt = DateTime.UtcNow;
+
                 await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
 
                 return Ok(new
                 {
@@ -328,13 +365,17 @@ namespace WMS.API.Controllers
                         line.CountedQuantity.Value - line.SystemQuantity
                 });
             }
-            catch (DbUpdateException ex)
+            catch (DbUpdateException)
             {
-                return BadRequest(new
-                {
-                    Message = "Database error while recording stock count.",
-                    Error = ex.InnerException?.Message ?? ex.Message
-                });
+                await transaction.RollbackAsync();
+
+                return BadRequest(
+                    "Database error while recording stock count.");
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
             }
         }
 
@@ -342,40 +383,53 @@ namespace WMS.API.Controllers
         [HttpPost("{id:long}/complete")]
         public async Task<IActionResult> CompleteStockCount(long id)
         {
-            var count = await _context.StockCounts
-                .Include(sc => sc.StockCountLines)
-                .FirstOrDefaultAsync(sc => sc.StockCountId == id);
+            if (id <= 0)
+                return BadRequest("A valid stock count ID is required.");
 
-            if (count == null)
-                return NotFound("Stock count not found.");
-
-            if (count.Status != "IN_PROGRESS")
-                return BadRequest(
-                    "Only IN_PROGRESS stock counts can be completed.");
-
-            if (!count.StockCountLines.Any())
-                return BadRequest(
-                    "Cannot complete a stock count without lines.");
-
-            var uncountedLines = count.StockCountLines
-                .Where(line => line.CountedQuantity == null)
-                .ToList();
-
-            if (uncountedLines.Any())
-            {
-                return BadRequest(new
-                {
-                    Message = "All stock count lines must have a physical count before completion.",
-                    UncountedLines = uncountedLines.Select(
-                        line => line.StockCountLineId)
-                });
-            }
-
-            count.Status = "COMPLETED";
+            await using var transaction =
+                await _context.Database.BeginTransactionAsync();
 
             try
             {
+                var count = await LockStockCountAsync(id);
+
+                if (count == null)
+                    return NotFound("Stock count not found.");
+
+                if (count.Status != "IN_PROGRESS")
+                {
+                    return BadRequest(
+                        "Only IN_PROGRESS stock counts can be completed.");
+                }
+
+                var lines = await _context.StockCountLines
+                    .Where(line => line.StockCountId == id)
+                    .ToListAsync();
+
+                if (!lines.Any())
+                {
+                    return BadRequest(
+                        "Cannot complete a stock count without lines.");
+                }
+
+                var uncountedLines = lines
+                    .Where(line => line.CountedQuantity == null)
+                    .Select(line => line.StockCountLineId)
+                    .ToList();
+
+                if (uncountedLines.Any())
+                {
+                    return BadRequest(new
+                    {
+                        Message = "All stock count lines must have a physical count before completion.",
+                        UncountedLines = uncountedLines
+                    });
+                }
+
+                count.Status = "COMPLETED";
+
                 await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
 
                 return Ok(new
                 {
@@ -383,16 +437,20 @@ namespace WMS.API.Controllers
                     count.StockCountId,
                     count.CountNumber,
                     count.Status,
-                    TotalLines = count.StockCountLines.Count
+                    TotalLines = lines.Count
                 });
             }
-            catch (DbUpdateException ex)
+            catch (DbUpdateException)
             {
-                return BadRequest(new
-                {
-                    Message = "Database error while completing stock count.",
-                    Error = ex.InnerException?.Message ?? ex.Message
-                });
+                await transaction.RollbackAsync();
+
+                return BadRequest(
+                    "Database error while completing stock count.");
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
             }
         }
 
@@ -402,58 +460,66 @@ namespace WMS.API.Controllers
             long id,
             [FromBody] PostStockCountDto dto)
         {
+            if (id <= 0)
+                return BadRequest("A valid stock count ID is required.");
+
+            if (dto == null)
+                return BadRequest("Posting details are required.");
+
             await using var dbTransaction =
                 await _context.Database.BeginTransactionAsync();
 
             try
             {
-                var count = await _context.StockCounts
-                    .FromSqlInterpolated($@"
-                        SELECT * FROM stock_counts
-                        WHERE stock_count_id = {id}
-                        FOR UPDATE")
-                    .FirstOrDefaultAsync();
+                var count = await LockStockCountAsync(id);
 
                 if (count == null)
                     return NotFound("Stock count not found.");
 
                 if (count.Status != "COMPLETED")
+                {
                     return BadRequest(
                         "Only COMPLETED stock counts can be posted.");
+                }
 
                 var lines = await _context.StockCountLines
                     .Where(line => line.StockCountId == id)
                     .Include(line => line.Lot)
                         .ThenInclude(lot => lot.Item)
+                    .OrderBy(line => line.StockCountLineId)
                     .ToListAsync();
 
                 if (!lines.Any())
                     return BadRequest("Stock count has no lines.");
 
                 if (lines.Any(line => line.CountedQuantity == null))
+                {
                     return BadRequest(
                         "All stock count lines must have a physical count.");
+                }
 
                 if (dto.PostedBy.HasValue)
                 {
                     var userExists = await _context.AppUsers
+                        .AsNoTracking()
                         .AnyAsync(u => u.UserId == dto.PostedBy.Value);
 
                     if (!userExists)
                         return BadRequest("Posted by user does not exist.");
                 }
 
-                var transactionLines =
+                var inventoryTransactionLines =
                     new List<InventoryTransactionLine>();
 
                 foreach (var line in lines)
                 {
                     var balance = await _context.InventoryBalances
                         .FromSqlInterpolated($@"
-                            SELECT * FROM inventory_balances
+                            SELECT *
+                            FROM inventory_balances
                             WHERE lot_id = {line.LotId}
-                            AND bin_id = {line.BinId}
-                            AND stock_status = 'AVAILABLE'
+                              AND bin_id = {line.BinId}
+                              AND stock_status = 'AVAILABLE'
                             FOR UPDATE")
                         .FirstOrDefaultAsync();
 
@@ -520,30 +586,38 @@ namespace WMS.API.Controllers
                         }
                     }
 
-                    transactionLines.Add(new InventoryTransactionLine
-                    {
-                        LotId = line.LotId,
-                        FromBinId = difference < 0 ? line.BinId : null,
-                        ToBinId = difference > 0 ? line.BinId : null,
-                        Quantity = Math.Abs(difference),
-                        UomId = line.Lot.Item.BaseUomId,
-                        LineRemarks =
-                            $"Stock count variance: {count.CountNumber}"
-                    });
+                    inventoryTransactionLines.Add(
+                        new InventoryTransactionLine
+                        {
+                            LotId = line.LotId,
+                            FromBinId = difference < 0
+                                ? line.BinId
+                                : null,
+                            ToBinId = difference > 0
+                                ? line.BinId
+                                : null,
+                            Quantity = Math.Abs(difference),
+                            UomId = line.Lot.Item.BaseUomId,
+                            LineRemarks =
+                                $"Stock count variance: {count.CountNumber}"
+                        });
                 }
+
+                var now = DateTime.UtcNow;
 
                 var inventoryTransaction = new InventoryTransaction
                 {
                     TransactionNumber = $"SC-{Guid.NewGuid():N}",
                     TransactionType = "COUNT_VARIANCE",
-                    TransactionDate = DateTime.UtcNow,
+                    TransactionDate = now,
                     ReferenceNumber = count.CountNumber,
                     Remarks = $"Posted stock count: {count.CountNumber}",
                     Status = "POSTED",
                     CreatedBy = count.CreatedBy,
                     PostedBy = dto.PostedBy,
-                    PostedAt = DateTime.UtcNow,
-                    InventoryTransactionLines = transactionLines
+                    PostedAt = now,
+                    InventoryTransactionLines =
+                        inventoryTransactionLines
                 };
 
                 _context.InventoryTransactions.Add(inventoryTransaction);
@@ -562,24 +636,32 @@ namespace WMS.API.Controllers
                     InventoryTransactionNumber =
                         inventoryTransaction.TransactionNumber,
                     TotalLines = lines.Count,
-                    AdjustedLines = transactionLines.Count
+                    AdjustedLines = inventoryTransactionLines.Count
                 });
             }
-            catch (DbUpdateException ex)
+            catch (DbUpdateException)
             {
                 await dbTransaction.RollbackAsync();
 
-                return BadRequest(new
-                {
-                    Message = "Database error while posting stock count.",
-                    Error = ex.InnerException?.Message ?? ex.Message
-                });
+                return BadRequest(
+                    "Database error while posting stock count.");
             }
-            catch (Exception)
+            catch
             {
                 await dbTransaction.RollbackAsync();
                 throw;
             }
+        }
+
+        private async Task<StockCount?> LockStockCountAsync(long id)
+        {
+            return await _context.StockCounts
+                .FromSqlInterpolated($@"
+                    SELECT *
+                    FROM stock_counts
+                    WHERE stock_count_id = {id}
+                    FOR UPDATE")
+                .FirstOrDefaultAsync();
         }
     }
 }

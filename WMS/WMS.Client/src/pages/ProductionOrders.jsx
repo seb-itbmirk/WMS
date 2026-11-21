@@ -3,7 +3,7 @@ import { useState } from 'react'
 import api from '../services/api'
 
 function ProductionOrdersPage({
-    productionOrders,
+    productionOrders = [],
     loading,
     error,
     onRefresh
@@ -11,7 +11,6 @@ function ProductionOrdersPage({
     const [showCreateForm, setShowCreateForm] = useState(false)
     const [saving, setSaving] = useState(false)
     const [formError, setFormError] = useState('')
-    const [formSuccess, setFormSuccess] = useState('')
 
     const [warehouses, setWarehouses] = useState([])
     const [boms, setBoms] = useState([])
@@ -41,6 +40,50 @@ function ProductionOrdersPage({
         }
     }
 
+    const formatDate = (dateValue) => {
+        if (!dateValue) {
+            return '-'
+        }
+
+        // Parse date-only values without introducing timezone shifts.
+        const datePart = String(dateValue).split('T')[0]
+        const [year, month, day] = datePart.split('-').map(Number)
+
+        if (!year || !month || !day) {
+            return '-'
+        }
+
+        return new Date(year, month - 1, day).toLocaleDateString()
+    }
+
+    const getErrorMessage = (error, fallbackMessage) => {
+        const data = error.response?.data
+
+        if (typeof data === 'string' && data.trim()) {
+            return data
+        }
+
+        if (data?.message) {
+            return data.message
+        }
+
+        if (data?.title) {
+            return data.title
+        }
+
+        if (data?.errors) {
+            const validationMessages = Object.values(data.errors)
+                .flat()
+                .filter(Boolean)
+
+            if (validationMessages.length > 0) {
+                return validationMessages.join(' ')
+            }
+        }
+
+        return fallbackMessage
+    }
+
     const loadFormOptions = async () => {
         try {
             setOptionsLoading(true)
@@ -51,12 +94,35 @@ function ProductionOrdersPage({
                 api.get('/bill-of-materials')
             ])
 
-            setWarehouses(warehouseResponse.data)
-            setBoms(bomResponse.data)
+            const warehouseData = Array.isArray(warehouseResponse.data)
+                ? warehouseResponse.data
+                : []
+
+            const bomData = Array.isArray(bomResponse.data)
+                ? bomResponse.data
+                : []
+
+            setWarehouses(
+                warehouseData.filter((warehouse) => warehouse.isActive)
+            )
+
+            // The production API only accepts ACTIVE BOMs.
+            setBoms(
+                bomData.filter(
+                    (bom) => bom.status?.toUpperCase() === 'ACTIVE'
+                )
+            )
         } catch (error) {
-            console.error('Unable to load form options:', error)
+            console.error('Unable to load production order options:', error)
+
+            setWarehouses([])
+            setBoms([])
+
             setFormError(
-                'Unable to load warehouses or BOMs. Check the API endpoints.'
+                getErrorMessage(
+                    error,
+                    'Unable to load warehouses or BOMs. Please check the API connection.'
+                )
             )
         } finally {
             setOptionsLoading(false)
@@ -74,10 +140,18 @@ function ProductionOrdersPage({
         })
 
         setFormError('')
-        setFormSuccess('')
         setShowCreateForm(true)
 
         loadFormOptions()
+    }
+
+    const closeCreateForm = () => {
+        if (saving) {
+            return
+        }
+
+        setShowCreateForm(false)
+        setFormError('')
     }
 
     const handleInputChange = (event) => {
@@ -93,10 +167,14 @@ function ProductionOrdersPage({
         event.preventDefault()
 
         setFormError('')
-        setFormSuccess('')
+
+        const productionNumber = formData.productionNumber.trim()
+        const plannedQuantity = Number(formData.plannedQuantity)
+        const bomId = Number(formData.bomId)
+        const warehouseId = Number(formData.warehouseId)
 
         if (
-            !formData.productionNumber.trim() ||
+            !productionNumber ||
             !formData.bomId ||
             !formData.warehouseId ||
             !formData.plannedQuantity ||
@@ -107,8 +185,18 @@ function ProductionOrdersPage({
             return
         }
 
-        if (Number(formData.plannedQuantity) <= 0) {
+        if (!Number.isFinite(plannedQuantity) || plannedQuantity <= 0) {
             setFormError('Planned quantity must be greater than zero.')
+            return
+        }
+
+        if (!Number.isInteger(bomId) || bomId <= 0) {
+            setFormError('Please select a valid bill of materials.')
+            return
+        }
+
+        if (!Number.isInteger(warehouseId) || warehouseId <= 0) {
+            setFormError('Please select a valid warehouse.')
             return
         }
 
@@ -120,37 +208,47 @@ function ProductionOrdersPage({
         try {
             setSaving(true)
 
+            // Property names match CreateProductionOrderDto.
             const payload = {
-                productionNumber: formData.productionNumber.trim(),
-                bomId: Number(formData.bomId),
-                warehouseId: Number(formData.warehouseId),
-                plannedQuantity: Number(formData.plannedQuantity),
+                productionNumber,
+                bomId,
+                warehouseId,
+                plannedQuantity,
                 plannedStartDate: formData.plannedStartDate,
                 plannedEndDate: formData.plannedEndDate
             }
 
             await api.post('/production-orders', payload)
 
-            setFormSuccess('Production order created successfully.')
+            setShowCreateForm(false)
 
             if (onRefresh) {
-                await onRefresh()
+                try {
+                    await onRefresh()
+                } catch (refreshError) {
+                    console.error(
+                        'Production order was created, but the list could not be refreshed:',
+                        refreshError
+                    )
+                }
             }
-
-            setShowCreateForm(false)
         } catch (error) {
             console.error('Unable to create production order:', error)
 
-            const responseMessage =
-                error.response?.data?.message ||
-                error.response?.data?.title ||
-                'Unable to create production order. Please check the submitted information.'
-
-            setFormError(responseMessage)
+            setFormError(
+                getErrorMessage(
+                    error,
+                    'Unable to create production order. Please check the submitted information.'
+                )
+            )
         } finally {
             setSaving(false)
         }
     }
+
+    const orders = Array.isArray(productionOrders)
+        ? productionOrders
+        : []
 
     return (
         <div className="page-content production-orders-page">
@@ -163,6 +261,7 @@ function ProductionOrdersPage({
                 </div>
 
                 <button
+                    type="button"
                     className="primary-button"
                     onClick={openCreateForm}
                 >
@@ -180,8 +279,9 @@ function ProductionOrdersPage({
                 <div className="panel">
                     <div className="panel-header">
                         <h2>Production Order List</h2>
+
                         <span className="record-count">
-                            {productionOrders.length} record(s)
+                            {orders.length} record(s)
                         </span>
                     </div>
 
@@ -200,42 +300,45 @@ function ProductionOrdersPage({
                             </thead>
 
                             <tbody>
-                                {productionOrders.length === 0 ? (
+                                {orders.length === 0 ? (
                                     <tr>
                                         <td colSpan="7">
                                             No production orders found.
                                         </td>
                                     </tr>
                                 ) : (
-                                    productionOrders.map((order) => (
+                                    orders.map((order) => (
                                         <tr key={order.productionOrderId}>
-                                            <td>{order.productionNumber}</td>
+                                            <td>
+                                                {order.productionNumber}
+                                            </td>
 
                                             <td>
                                                 {order.finishedItemCode} - {order.finishedItemName}
                                             </td>
 
-                                            <td>{order.warehouseName}</td>
+                                            <td>
+                                                {order.warehouseName}
+                                            </td>
 
                                             <td>
                                                 {order.plannedQuantity} {order.uomCode}
                                             </td>
 
                                             <td>
-                                                {order.plannedStartDate
-                                                    ? new Date(order.plannedStartDate).toLocaleDateString()
-                                                    : '-'}
+                                                {formatDate(order.plannedStartDate)}
                                             </td>
 
                                             <td>
-                                                {order.plannedEndDate
-                                                    ? new Date(order.plannedEndDate).toLocaleDateString()
-                                                    : '-'}
+                                                {formatDate(order.plannedEndDate)}
                                             </td>
 
                                             <td>
-                                                <span className={`status-badge ${getStatusClass(order.status)}`}>
-                                                    {order.status?.replace('_', ' ')}
+                                                <span
+                                                    className={`status-badge ${getStatusClass(order.productionStatus)}`}
+                                                >
+                                                    {order.productionStatus
+                                                        ?.replaceAll('_', ' ') || 'DRAFT'}
                                                 </span>
                                             </td>
                                         </tr>
@@ -260,8 +363,9 @@ function ProductionOrdersPage({
 
                             <button
                                 type="button"
-                                onClick={() => setShowCreateForm(false)}
+                                onClick={closeCreateForm}
                                 disabled={saving}
+                                aria-label="Close"
                             >
                                 ✕
                             </button>
@@ -274,49 +378,75 @@ function ProductionOrdersPage({
 
                                 {/* Production Number */}
                                 <div className="form-group">
-                                    <label>Production Number *</label>
+                                    <label htmlFor="productionNumber">
+                                        Production Number *
+                                    </label>
+
                                     <input
+                                        id="productionNumber"
                                         type="text"
                                         name="productionNumber"
                                         value={formData.productionNumber}
                                         onChange={handleInputChange}
                                         placeholder="e.g. PROD-2026-0002"
+                                        maxLength={50}
                                         required
+                                        disabled={saving}
                                     />
                                 </div>
 
                                 {/* Bill of Materials */}
                                 <div className="form-group">
-                                    <label>Bill of Materials *</label>
+                                    <label htmlFor="bomId">
+                                        Bill of Materials *
+                                    </label>
+
                                     <select
+                                        id="bomId"
                                         name="bomId"
                                         value={formData.bomId}
                                         onChange={handleInputChange}
                                         required
+                                        disabled={saving || boms.length === 0}
                                     >
-                                        <option value="">Select BOM</option>
+                                        <option value="">
+                                            Select BOM
+                                        </option>
 
                                         {boms.map((bom) => (
                                             <option
                                                 key={bom.bomId}
                                                 value={bom.bomId}
                                             >
-                                                {bom.bomNumber} - {bom.finishedItemName}
+                                                {bom.bomCode} (Version {bom.versionNumber}) - {bom.finishedItemName}
                                             </option>
                                         ))}
                                     </select>
+
+                                    {boms.length === 0 && (
+                                        <small>
+                                            No active BOMs are available.
+                                        </small>
+                                    )}
                                 </div>
 
                                 {/* Warehouse */}
                                 <div className="form-group">
-                                    <label>Warehouse *</label>
+                                    <label htmlFor="warehouseId">
+                                        Warehouse *
+                                    </label>
+
                                     <select
+                                        id="warehouseId"
                                         name="warehouseId"
                                         value={formData.warehouseId}
                                         onChange={handleInputChange}
                                         required
+                                        disabled={saving || warehouses.length === 0}
                                     >
-                                        <option value="">Select Warehouse</option>
+                                        <option value="">
+                                            Select Warehouse
+                                        </option>
 
                                         {warehouses.map((warehouse) => (
                                             <option
@@ -327,52 +457,75 @@ function ProductionOrdersPage({
                                             </option>
                                         ))}
                                     </select>
+
+                                    {warehouses.length === 0 && (
+                                        <small>
+                                            No active warehouses are available.
+                                        </small>
+                                    )}
                                 </div>
 
                                 {/* Planned Quantity */}
                                 <div className="form-group">
-                                    <label>Planned Quantity *</label>
+                                    <label htmlFor="plannedQuantity">
+                                        Planned Quantity *
+                                    </label>
+
                                     <input
+                                        id="plannedQuantity"
                                         type="number"
                                         name="plannedQuantity"
                                         value={formData.plannedQuantity}
                                         onChange={handleInputChange}
-                                        min="1"
+                                        min="0.000001"
                                         step="any"
                                         placeholder="Enter planned quantity"
                                         required
+                                        disabled={saving}
                                     />
                                 </div>
 
                                 {/* Planned Dates */}
                                 <div className="form-row">
                                     <div className="form-group">
-                                        <label>Planned Start Date *</label>
+                                        <label htmlFor="plannedStartDate">
+                                            Planned Start Date *
+                                        </label>
+
                                         <input
+                                            id="plannedStartDate"
                                             type="date"
                                             name="plannedStartDate"
                                             value={formData.plannedStartDate}
                                             onChange={handleInputChange}
                                             required
+                                            disabled={saving}
                                         />
                                     </div>
 
                                     <div className="form-group">
-                                        <label>Planned End Date *</label>
+                                        <label htmlFor="plannedEndDate">
+                                            Planned End Date *
+                                        </label>
+
                                         <input
+                                            id="plannedEndDate"
                                             type="date"
                                             name="plannedEndDate"
                                             value={formData.plannedEndDate}
                                             onChange={handleInputChange}
                                             min={formData.plannedStartDate || undefined}
                                             required
+                                            disabled={saving}
                                         />
                                     </div>
                                 </div>
 
                                 {/* Form Error */}
                                 {formError && (
-                                    <p className="error-message">{formError}</p>
+                                    <p className="error-message">
+                                        {formError}
+                                    </p>
                                 )}
 
                                 {/* Form Actions */}
@@ -380,7 +533,7 @@ function ProductionOrdersPage({
                                     <button
                                         type="button"
                                         className="secondary-button"
-                                        onClick={() => setShowCreateForm(false)}
+                                        onClick={closeCreateForm}
                                         disabled={saving}
                                     >
                                         Cancel
@@ -389,7 +542,11 @@ function ProductionOrdersPage({
                                     <button
                                         type="submit"
                                         className="primary-button"
-                                        disabled={saving}
+                                        disabled={
+                                            saving ||
+                                            boms.length === 0 ||
+                                            warehouses.length === 0
+                                        }
                                     >
                                         {saving
                                             ? 'Creating...'

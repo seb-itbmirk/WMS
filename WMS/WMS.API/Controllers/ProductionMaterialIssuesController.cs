@@ -23,6 +23,14 @@ namespace WMS.API.Controllers
             _logger = logger;
         }
 
+        private sealed class ReservationAllocation
+        {
+            public long LotId { get; set; }
+            public long BinId { get; set; }
+            public long UomId { get; set; }
+            public decimal Quantity { get; set; }
+        }
+
         // GET: api/production-material-issues
         [HttpGet]
         public async Task<IActionResult> GetAll()
@@ -158,18 +166,36 @@ namespace WMS.API.Controllers
                     });
                 }
 
-                // Check outstanding requirements.
+                // Track the remaining quantity of each reservation.
+                // This prevents a reservation from being allocated more than once.
+                var remainingReservationQuantities = activeReservations
+                    .ToDictionary(
+                        r => r.ReservationId,
+                        r => r.ReservedQuantity);
+
+                var allocations = new List<ReservationAllocation>();
+
+                // Allocate only the outstanding requirement quantity.
                 foreach (var requirement in order.ProductionMaterialRequirements)
                 {
-                    var reservedForItem = activeReservations
-                        .Where(r => r.Lot.ItemId == requirement.ItemId)
-                        .Sum(r => r.ReservedQuantity);
-
                     var outstandingQuantity =
                         requirement.RequiredQuantity -
                         requirement.IssuedQuantity;
 
-                    if (reservedForItem < outstandingQuantity)
+                    if (outstandingQuantity <= 0)
+                    {
+                        continue;
+                    }
+
+                    var matchingReservations = activeReservations
+                        .Where(r => r.Lot.ItemId == requirement.ItemId)
+                        .OrderBy(r => r.ReservationId)
+                        .ToList();
+
+                    var availableReservedQuantity = matchingReservations
+                        .Sum(r => remainingReservationQuantities[r.ReservationId]);
+
+                    if (availableReservedQuantity < outstandingQuantity)
                     {
                         return BadRequest(new
                         {
@@ -178,23 +204,78 @@ namespace WMS.API.Controllers
                             requiredQuantity = requirement.RequiredQuantity,
                             issuedQuantity = requirement.IssuedQuantity,
                             outstandingQuantity,
-                            activeReservedQuantity = reservedForItem
+                            activeReservedQuantity = availableReservedQuantity
+                        });
+                    }
+
+                    var quantityToAllocate = outstandingQuantity;
+
+                    foreach (var reservation in matchingReservations)
+                    {
+                        if (quantityToAllocate <= 0)
+                        {
+                            break;
+                        }
+
+                        var availableQuantity =
+                            remainingReservationQuantities[reservation.ReservationId];
+
+                        if (availableQuantity <= 0)
+                        {
+                            continue;
+                        }
+
+                        var allocatedQuantity = Math.Min(
+                            availableQuantity,
+                            quantityToAllocate);
+
+                        allocations.Add(new ReservationAllocation
+                        {
+                            LotId = reservation.LotId,
+                            BinId = reservation.BinId,
+                            UomId = requirement.UomId,
+                            Quantity = allocatedQuantity
+                        });
+
+                        remainingReservationQuantities[reservation.ReservationId]
+                            -= allocatedQuantity;
+
+                        quantityToAllocate -= allocatedQuantity;
+                    }
+
+                    if (quantityToAllocate > 0)
+                    {
+                        return BadRequest(new
+                        {
+                            message = "Unable to allocate the outstanding material requirement from active reservations.",
+                            itemId = requirement.ItemId,
+                            unallocatedQuantity = quantityToAllocate
                         });
                     }
                 }
 
-                // Group reservations by lot and bin.
-                var groupedReservations = activeReservations
-                    .GroupBy(r => new
+                if (!allocations.Any())
+                {
+                    return BadRequest(new
                     {
-                        r.LotId,
-                        r.BinId
+                        message = "There are no outstanding material requirements to issue."
+                    });
+                }
+
+                // Combine allocations that use the same lot, bin, and UOM.
+                var groupedAllocations = allocations
+                    .GroupBy(a => new
+                    {
+                        a.LotId,
+                        a.BinId,
+                        a.UomId
                     })
-                    .Select(g => new
+                    .Select(g => new ReservationAllocation
                     {
-                        g.Key.LotId,
-                        g.Key.BinId,
-                        Quantity = g.Sum(r => r.ReservedQuantity)
+                        LotId = g.Key.LotId,
+                        BinId = g.Key.BinId,
+                        UomId = g.Key.UomId,
+                        Quantity = g.Sum(a => a.Quantity)
                     })
                     .ToList();
 
@@ -210,29 +291,15 @@ namespace WMS.API.Controllers
                     IssuedBy = dto.IssuedBy
                 };
 
-                foreach (var group in groupedReservations)
+                foreach (var allocation in groupedAllocations)
                 {
-                    var lot = await _context.InventoryLots
-                        .FirstAsync(l => l.LotId == group.LotId);
-
-                    var requirement = order.ProductionMaterialRequirements
-                        .FirstOrDefault(r => r.ItemId == lot.ItemId);
-
-                    if (requirement == null)
-                    {
-                        return BadRequest(new
-                        {
-                            message = $"No production material requirement exists for lot {group.LotId}."
-                        });
-                    }
-
                     issue.ProductionMaterialIssueLines.Add(
                         new ProductionMaterialIssueLine
                         {
-                            LotId = group.LotId,
-                            BinId = group.BinId,
-                            IssuedQuantity = group.Quantity,
-                            UomId = requirement.UomId
+                            LotId = allocation.LotId,
+                            BinId = allocation.BinId,
+                            IssuedQuantity = allocation.Quantity,
+                            UomId = allocation.UomId
                         });
                 }
 
@@ -317,6 +384,21 @@ namespace WMS.API.Controllers
                     {
                         message = "Material issue has no lines."
                     });
+                }
+
+                // Every issue line must have a positive quantity.
+                foreach (var line in issue.ProductionMaterialIssueLines)
+                {
+                    if (line.IssuedQuantity <= 0)
+                    {
+                        return BadRequest(new
+                        {
+                            message = "Issue quantity must be greater than zero.",
+                            issueLineId = line.IssueLineId,
+                            lotId = line.LotId,
+                            issuedQuantity = line.IssuedQuantity
+                        });
+                    }
                 }
 
                 var activeReservations = await _context.InventoryReservations
@@ -471,7 +553,9 @@ namespace WMS.API.Controllers
                     foreach (var reservation in matchingReservations)
                     {
                         if (quantityToFulfill <= 0)
+                        {
                             break;
+                        }
 
                         var fulfilledQuantity = Math.Min(
                             reservation.ReservedQuantity,

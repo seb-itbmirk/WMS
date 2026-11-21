@@ -34,6 +34,8 @@ namespace WMS.API.Controllers
 
                 if (order == null)
                 {
+                    await transaction.RollbackAsync();
+
                     return NotFound(new
                     {
                         message = "Production order not found."
@@ -42,6 +44,8 @@ namespace WMS.API.Controllers
 
                 if (order.ProductionStatus != "IN_PROGRESS")
                 {
+                    await transaction.RollbackAsync();
+
                     return BadRequest(new
                     {
                         message = "Only IN_PROGRESS production orders can be completed.",
@@ -54,10 +58,22 @@ namespace WMS.API.Controllers
                     .Where(o => o.ProductionOrderId == productionOrderId)
                     .ToListAsync();
 
+                if (outputs.Any(o => o.ProducedQuantity <= 0))
+                {
+                    await transaction.RollbackAsync();
+
+                    return BadRequest(new
+                    {
+                        message = "Production output quantities must be greater than zero."
+                    });
+                }
+
                 var totalProduced = outputs.Sum(o => o.ProducedQuantity);
 
                 if (totalProduced <= 0)
                 {
+                    await transaction.RollbackAsync();
+
                     return BadRequest(new
                     {
                         message = "Production output must be recorded before completing the order."
@@ -81,11 +97,27 @@ namespace WMS.API.Controllers
                             w.Lot.ItemId == requirement.ItemId)
                         .SumAsync(w => (decimal?)w.WastedQuantity) ?? 0;
 
+                    if (consumed < 0 || wasted < 0)
+                    {
+                        await transaction.RollbackAsync();
+
+                        return BadRequest(new
+                        {
+                            message = "Consumption and waste quantities cannot be negative.",
+                            itemId = requirement.ItemId,
+                            consumedQuantity = consumed,
+                            wastedQuantity = wasted
+                        });
+                    }
+
                     var accountedQuantity = consumed + wasted;
-                    var remainingQuantity = requirement.IssuedQuantity - accountedQuantity;
+                    var remainingQuantity =
+                        requirement.IssuedQuantity - accountedQuantity;
 
                     if (remainingQuantity < 0)
                     {
+                        await transaction.RollbackAsync();
+
                         return BadRequest(new
                         {
                             message = "Recorded consumption and waste exceed the issued material quantity.",
@@ -111,11 +143,88 @@ namespace WMS.API.Controllers
 
                 if (materialIssues.Count > 0)
                 {
+                    await transaction.RollbackAsync();
+
                     return BadRequest(new
                     {
                         message = "Production cannot be completed because some issued materials have not been fully accounted for. Record their consumption or waste first.",
                         unaccountedMaterials = materialIssues
                     });
+                }
+
+                // Release any remaining active reservations.
+                var activeReservations = await _context.InventoryReservations
+                    .Where(r =>
+                        r.ReferenceType == "PRODUCTION_ORDER" &&
+                        r.ReferenceId == productionOrderId &&
+                        r.Status == "ACTIVE")
+                    .ToListAsync();
+
+                foreach (var reservation in activeReservations)
+                {
+                    var balance = await _context.InventoryBalances
+                        .FirstOrDefaultAsync(b =>
+                            b.LotId == reservation.LotId &&
+                            b.BinId == reservation.BinId &&
+                            b.StockStatus == "AVAILABLE");
+
+                    if (balance == null)
+                    {
+                        await transaction.RollbackAsync();
+
+                        return BadRequest(new
+                        {
+                            message = "Inventory balance not found for an active production reservation.",
+                            reservationId = reservation.ReservationId,
+                            lotId = reservation.LotId,
+                            binId = reservation.BinId
+                        });
+                    }
+
+                    if (reservation.ReservedQuantity < 0 ||
+                        balance.QuantityReserved < reservation.ReservedQuantity)
+                    {
+                        await transaction.RollbackAsync();
+
+                        return BadRequest(new
+                        {
+                            message = "Inventory reserved quantity is inconsistent with the active reservation.",
+                            reservationId = reservation.ReservationId,
+                            lotId = reservation.LotId,
+                            binId = reservation.BinId,
+                            reservationQuantity = reservation.ReservedQuantity,
+                            inventoryReservedQuantity = balance.QuantityReserved
+                        });
+                    }
+
+                    balance.QuantityReserved -= reservation.ReservedQuantity;
+                    balance.UpdatedAt = DateTime.UtcNow;
+
+                    reservation.Status = "RELEASED";
+                }
+
+                // Update the reserved quantity on each material requirement.
+                foreach (var requirement in order.ProductionMaterialRequirements)
+                {
+                    var releasedQuantity = activeReservations
+                        .Where(r => r.LotId > 0)
+                        .Where(r => r.Lot.ItemId == requirement.ItemId)
+                        .Sum(r => r.ReservedQuantity);
+
+                    if (releasedQuantity > requirement.ReservedQuantity)
+                    {
+                        await transaction.RollbackAsync();
+
+                        return BadRequest(new
+                        {
+                            message = "Released reservation quantity exceeds the reserved quantity recorded on the material requirement.",
+                            itemId = requirement.ItemId,
+                            requirementReservedQuantity = requirement.ReservedQuantity,
+                            releasedQuantity
+                        });
+                    }
+
+                    requirement.ReservedQuantity -= releasedQuantity;
                 }
 
                 // Complete production order.
@@ -133,6 +242,7 @@ namespace WMS.API.Controllers
                     productionStatus = order.ProductionStatus,
                     plannedQuantity = order.PlannedQuantity,
                     totalProduced,
+                    releasedReservationCount = activeReservations.Count,
                     actualStartDate = order.ActualStartDate,
                     actualEndDate = order.ActualEndDate
                 });

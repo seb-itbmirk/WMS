@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WMS.API.Data;
 using WMS.API.DTOs.QualityParameters;
@@ -22,6 +23,7 @@ namespace WMS.API.Controllers
         public async Task<IActionResult> GetAll()
         {
             var parameters = await _context.QualityParameters
+                .AsNoTracking()
                 .OrderBy(p => p.ParameterCode)
                 .Select(p => new
                 {
@@ -41,6 +43,7 @@ namespace WMS.API.Controllers
         public async Task<IActionResult> GetById(long id)
         {
             var parameter = await _context.QualityParameters
+                .AsNoTracking()
                 .Where(p => p.ParameterId == id)
                 .Select(p => new
                 {
@@ -53,7 +56,12 @@ namespace WMS.API.Controllers
                 .FirstOrDefaultAsync();
 
             if (parameter == null)
-                return NotFound(new { message = "Quality parameter not found." });
+            {
+                return NotFound(new
+                {
+                    message = "Quality parameter not found."
+                });
+            }
 
             return Ok(parameter);
         }
@@ -63,6 +71,14 @@ namespace WMS.API.Controllers
         public async Task<IActionResult> Create(
             [FromBody] CreateQualityParameterDto dto)
         {
+            if (dto == null)
+            {
+                return BadRequest(new
+                {
+                    message = "Quality parameter details are required."
+                });
+            }
+
             if (string.IsNullOrWhiteSpace(dto.ParameterCode) ||
                 string.IsNullOrWhiteSpace(dto.ParameterName))
             {
@@ -73,6 +89,23 @@ namespace WMS.API.Controllers
             }
 
             var code = dto.ParameterCode.Trim();
+            var name = dto.ParameterName.Trim();
+
+            if (code.Length > 40)
+            {
+                return BadRequest(new
+                {
+                    message = "Parameter code cannot exceed 40 characters."
+                });
+            }
+
+            if (name.Length > 120)
+            {
+                return BadRequest(new
+                {
+                    message = "Parameter name cannot exceed 120 characters."
+                });
+            }
 
             var exists = await _context.QualityParameters
                 .AnyAsync(p => p.ParameterCode == code);
@@ -88,12 +121,17 @@ namespace WMS.API.Controllers
             var parameter = new QualityParameter
             {
                 ParameterCode = code,
-                ParameterName = dto.ParameterName.Trim(),
-                Description = dto.Description,
-                UnitOfMeasure = dto.UnitOfMeasure
+                ParameterName = name,
+                Description = string.IsNullOrWhiteSpace(dto.Description)
+                    ? null
+                    : dto.Description.Trim(),
+                UnitOfMeasure = string.IsNullOrWhiteSpace(dto.UnitOfMeasure)
+                    ? null
+                    : dto.UnitOfMeasure.Trim()
             };
 
             _context.QualityParameters.Add(parameter);
+
             await _context.SaveChangesAsync();
 
             return CreatedAtAction(
@@ -101,6 +139,7 @@ namespace WMS.API.Controllers
                 new { id = parameter.ParameterId },
                 new
                 {
+                    message = "Quality parameter created successfully.",
                     parameter.ParameterId,
                     parameter.ParameterCode,
                     parameter.ParameterName,
@@ -115,11 +154,24 @@ namespace WMS.API.Controllers
             long id,
             [FromBody] UpdateQualityParameterDto dto)
         {
+            if (dto == null)
+            {
+                return BadRequest(new
+                {
+                    message = "Quality parameter details are required."
+                });
+            }
+
             var parameter = await _context.QualityParameters
                 .FirstOrDefaultAsync(p => p.ParameterId == id);
 
             if (parameter == null)
-                return NotFound(new { message = "Quality parameter not found." });
+            {
+                return NotFound(new
+                {
+                    message = "Quality parameter not found."
+                });
+            }
 
             if (string.IsNullOrWhiteSpace(dto.ParameterCode) ||
                 string.IsNullOrWhiteSpace(dto.ParameterName))
@@ -131,6 +183,23 @@ namespace WMS.API.Controllers
             }
 
             var code = dto.ParameterCode.Trim();
+            var name = dto.ParameterName.Trim();
+
+            if (code.Length > 40)
+            {
+                return BadRequest(new
+                {
+                    message = "Parameter code cannot exceed 40 characters."
+                });
+            }
+
+            if (name.Length > 120)
+            {
+                return BadRequest(new
+                {
+                    message = "Parameter name cannot exceed 120 characters."
+                });
+            }
 
             var duplicate = await _context.QualityParameters
                 .AnyAsync(p =>
@@ -146,9 +215,15 @@ namespace WMS.API.Controllers
             }
 
             parameter.ParameterCode = code;
-            parameter.ParameterName = dto.ParameterName.Trim();
-            parameter.Description = dto.Description;
-            parameter.UnitOfMeasure = dto.UnitOfMeasure;
+            parameter.ParameterName = name;
+            parameter.Description =
+                string.IsNullOrWhiteSpace(dto.Description)
+                    ? null
+                    : dto.Description.Trim();
+            parameter.UnitOfMeasure =
+                string.IsNullOrWhiteSpace(dto.UnitOfMeasure)
+                    ? null
+                    : dto.UnitOfMeasure.Trim();
 
             await _context.SaveChangesAsync();
 

@@ -1,7 +1,7 @@
 ﻿
+using System.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Data;
 using WMS.API.Data;
 using WMS.API.DTOs.ProductionWaste;
 using WMS.API.Models;
@@ -24,6 +24,7 @@ namespace WMS.API.Controllers
         public async Task<IActionResult> GetAll()
         {
             var wastes = await _context.ProductionWastes
+                .AsNoTracking()
                 .OrderByDescending(w => w.RecordedAt)
                 .Select(w => new
                 {
@@ -52,6 +53,7 @@ namespace WMS.API.Controllers
         public async Task<IActionResult> GetById(long id)
         {
             var waste = await _context.ProductionWastes
+                .AsNoTracking()
                 .Where(w => w.WasteId == id)
                 .Select(w => new
                 {
@@ -73,10 +75,12 @@ namespace WMS.API.Controllers
                 .FirstOrDefaultAsync();
 
             if (waste == null)
+            {
                 return NotFound(new
                 {
                     message = "Production waste record not found."
                 });
+            }
 
             return Ok(waste);
         }
@@ -90,12 +94,15 @@ namespace WMS.API.Controllers
                 .AnyAsync(p => p.ProductionOrderId == productionOrderId);
 
             if (!orderExists)
+            {
                 return NotFound(new
                 {
                     message = "Production order not found."
                 });
+            }
 
             var wastes = await _context.ProductionWastes
+                .AsNoTracking()
                 .Where(w => w.ProductionOrderId == productionOrderId)
                 .OrderByDescending(w => w.RecordedAt)
                 .Select(w => new
@@ -155,10 +162,12 @@ namespace WMS.API.Controllers
                         p.ProductionOrderId == dto.ProductionOrderId);
 
                 if (order == null)
+                {
                     return NotFound(new
                     {
                         message = "Production order not found."
                     });
+                }
 
                 if (order.ProductionStatus != "RELEASED" &&
                     order.ProductionStatus != "IN_PROGRESS")
@@ -173,19 +182,23 @@ namespace WMS.API.Controllers
                     .FirstOrDefaultAsync(l => l.LotId == dto.LotId);
 
                 if (lot == null)
+                {
                     return NotFound(new
                     {
                         message = "Inventory lot not found."
                     });
+                }
 
                 var requirement = order.ProductionMaterialRequirements
                     .FirstOrDefault(r => r.ItemId == lot.ItemId);
 
                 if (requirement == null)
+                {
                     return BadRequest(new
                     {
                         message = "This lot's item is not part of the production order requirements."
                     });
+                }
 
                 if (dto.UomId != requirement.UomId)
                 {
@@ -195,78 +208,96 @@ namespace WMS.API.Controllers
                     });
                 }
 
-                // Get total quantity issued for this lot
-                // from POSTED production material issues.
-                var issuedQuantity =
+                // Calculate actual posted issue quantity for this lot.
+                var issuedLotQuantity =
                     await _context.ProductionMaterialIssues
                         .Where(i =>
                             i.ProductionOrderId == dto.ProductionOrderId &&
                             i.Status == "POSTED")
                         .SelectMany(i => i.ProductionMaterialIssueLines)
                         .Where(l => l.LotId == dto.LotId)
-                        .SumAsync(l => (decimal?)l.IssuedQuantity) ?? 0;
+                        .SumAsync(l => (decimal?)l.IssuedQuantity) ?? 0m;
 
-                // Get total consumption recorded for this lot.
-                var consumedQuantity =
+                // Calculate previous consumption for this lot.
+                var consumedLotQuantity =
                     await _context.ProductionConsumptions
                         .Where(c =>
                             c.ProductionOrderId == dto.ProductionOrderId &&
                             c.LotId == dto.LotId)
-                        .SumAsync(c => (decimal?)c.ConsumedQuantity) ?? 0;
+                        .SumAsync(c => (decimal?)c.ConsumedQuantity) ?? 0m;
 
-                // Get previously recorded waste for this lot.
-                var previousWaste =
+                // Calculate previously recorded waste for this lot.
+                var previousLotWaste =
                     await _context.ProductionWastes
                         .Where(w =>
                             w.ProductionOrderId == dto.ProductionOrderId &&
                             w.LotId == dto.LotId)
-                        .SumAsync(w => (decimal?)w.WastedQuantity) ?? 0;
+                        .SumAsync(w => (decimal?)w.WastedQuantity) ?? 0m;
 
                 var remainingLotQuantity =
-                    issuedQuantity - consumedQuantity - previousWaste;
+                    issuedLotQuantity -
+                    consumedLotQuantity -
+                    previousLotWaste;
 
                 if (dto.WastedQuantity > remainingLotQuantity)
                 {
                     return BadRequest(new
                     {
                         message = "Waste quantity exceeds the remaining issued quantity for this lot.",
-                        issuedQuantity,
-                        consumedQuantity,
-                        previousWaste,
+                        issuedQuantity = issuedLotQuantity,
+                        consumedQuantity = consumedLotQuantity,
+                        previousWaste = previousLotWaste,
                         remainingQuantity = remainingLotQuantity,
                         requestedWasteQuantity = dto.WastedQuantity
                     });
                 }
 
-                // Validate against the total issued quantity
-                // for this material requirement across all lots.
-                var totalConsumed =
+                // Calculate actual posted issue quantity for this item
+                // across all lots issued to this production order.
+                var issuedItemQuantity =
+                    await _context.ProductionMaterialIssues
+                        .Where(i =>
+                            i.ProductionOrderId == dto.ProductionOrderId &&
+                            i.Status == "POSTED")
+                        .SelectMany(i => i.ProductionMaterialIssueLines)
+                        .Where(l => l.Lot.ItemId == lot.ItemId)
+                        .SumAsync(l => (decimal?)l.IssuedQuantity) ?? 0m;
+
+                // Calculate total previous consumption for this item.
+                var consumedItemQuantity =
                     await _context.ProductionConsumptions
                         .Where(c =>
                             c.ProductionOrderId == dto.ProductionOrderId &&
                             c.Lot.ItemId == lot.ItemId)
-                        .SumAsync(c => (decimal?)c.ConsumedQuantity) ?? 0;
+                        .SumAsync(c => (decimal?)c.ConsumedQuantity) ?? 0m;
 
-                var totalWaste =
+                // Calculate total previous waste for this item.
+                var previousItemWaste =
                     await _context.ProductionWastes
                         .Where(w =>
                             w.ProductionOrderId == dto.ProductionOrderId &&
                             w.Lot.ItemId == lot.ItemId)
-                        .SumAsync(w => (decimal?)w.WastedQuantity) ?? 0;
+                        .SumAsync(w => (decimal?)w.WastedQuantity) ?? 0m;
 
-                var totalIssued =
-                    requirement.IssuedQuantity;
+                var totalUsedQuantity =
+                    consumedItemQuantity +
+                    previousItemWaste +
+                    dto.WastedQuantity;
 
-                if (totalConsumed + totalWaste + dto.WastedQuantity >
-                    totalIssued)
+                if (totalUsedQuantity > issuedItemQuantity)
                 {
                     return BadRequest(new
                     {
-                        message = "Total consumption and waste cannot exceed the issued quantity for this material.",
-                        issuedQuantity = totalIssued,
-                        consumedQuantity = totalConsumed,
-                        previousWaste = totalWaste,
-                        requestedWasteQuantity = dto.WastedQuantity
+                        message = "Total consumption and waste cannot exceed the actual issued quantity for this material.",
+                        issuedQuantity = issuedItemQuantity,
+                        consumedQuantity = consumedItemQuantity,
+                        previousWaste = previousItemWaste,
+                        requestedWasteQuantity = dto.WastedQuantity,
+                        totalUsedQuantity,
+                        remainingQuantity =
+                            issuedItemQuantity -
+                            consumedItemQuantity -
+                            previousItemWaste
                     });
                 }
 
@@ -302,12 +333,15 @@ namespace WMS.API.Controllers
                         uomId = waste.UomId,
                         wasteReason = waste.WasteReason,
                         recordedAt = waste.RecordedAt,
-                        issuedQuantity = totalIssued,
-                        totalConsumed,
-                        totalWaste = totalWaste + waste.WastedQuantity,
+                        issuedQuantity = issuedItemQuantity,
+                        totalConsumed = consumedItemQuantity,
+                        totalWaste =
+                            previousItemWaste + waste.WastedQuantity,
                         remainingQuantity =
-                            totalIssued - totalConsumed -
-                            totalWaste - waste.WastedQuantity
+                            issuedItemQuantity -
+                            consumedItemQuantity -
+                            previousItemWaste -
+                            waste.WastedQuantity
                     });
             }
             catch
