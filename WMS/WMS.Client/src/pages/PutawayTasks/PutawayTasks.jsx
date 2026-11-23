@@ -1,6 +1,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
-import api from '../services/api'
+import api from '../../services/api'
 
 function getValue(object, camelCase, pascalCase) {
     return object?.[camelCase] ?? object?.[pascalCase]

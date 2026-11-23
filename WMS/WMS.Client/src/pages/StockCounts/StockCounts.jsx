@@ -1,6 +1,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
-import api from '../services/api'
+import api from '../../services/api'
 
 function valueOf(obj, camel, pascal) {
     return obj?.[camel] ?? obj?.[pascal]

@@ -1,0 +1,504 @@
+
+/* =========================================
+   PRODUCTION ORDERS
+========================================= */
+
+.production-orders-page {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+    padding-bottom: 30px;
+    color: #26352f;
+}
+
+/* =========================================
+   PAGE HEADER
+========================================= */
+
+.production-orders-page .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 0;
+}
+
+.production-orders-page .page-header h1 {
+    margin: 4px 0;
+    color: #26352f;
+    font-size: 27px;
+    font-weight: 700;
+}
+
+.production-orders-page .page-header p {
+    margin: 6px 0 0;
+    color: #78847d;
+    font-size: 13px;
+}
+
+.production-orders-page .record-count {
+    margin: 4px 0 0;
+    color: #78847d;
+    font-size: 12px;
+}
+
+/* =========================================
+   BUTTONS
+========================================= */
+
+.production-orders-page .primary-button {
+    padding: 9px 13px;
+    border: 1px solid #365c43;
+    border-radius: 6px;
+    background: #365c43;
+    color: #fff;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.production-orders-page .primary-button:hover:not(:disabled) {
+    background: #294b36;
+    border-color: #294b36;
+}
+
+.production-orders-page .primary-button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* =========================================
+   TABLE
+========================================= */
+
+.production-orders-page .table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    background: #fff;
+    border: 1px solid #e5eae6;
+    border-radius: 10px;
+}
+
+.production-orders-page .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.production-orders-page .data-table th {
+    padding: 12px;
+    background: #f6f8f6;
+    color: #78847d;
+    border-bottom: 1px solid #e6ebe6;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-align: left;
+}
+
+.production-orders-page .data-table td {
+    padding: 13px 12px;
+    color: #536159;
+    border-bottom: 1px solid #edf0ed;
+    font-size: 12px;
+    vertical-align: middle;
+}
+
+.production-orders-page .data-table tbody tr:hover {
+    background: #fafcf9;
+}
+
+.production-orders-page .data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.production-orders-page .data-table td strong {
+    color: #304238;
+    font-weight: 700;
+}
+
+/* =========================================
+   STATUS BADGES
+========================================= */
+
+.production-orders-page .status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 9px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.production-orders-page .status-draft {
+    background: #f0f2f0;
+    color: #78847d;
+}
+
+.production-orders-page .status-released {
+    background: #e7f3e9;
+    color: #347047;
+}
+
+.production-orders-page .status-progress {
+    background: #fff5d9;
+    color: #8b6b24;
+}
+
+.production-orders-page .status-completed {
+    background: #e7f3e9;
+    color: #347047;
+}
+
+.production-orders-page .status-cancelled {
+    background: #f3eaea;
+    color: #995555;
+}
+
+/* =========================================
+   ERROR MESSAGE
+========================================= */
+
+.production-orders-page .error-message {
+    padding: 12px 15px;
+    border: 1px solid #f1dada;
+    border-radius: 7px;
+    background: #fbebeb;
+    color: #984747;
+    font-size: 12px;
+}
+
+/* =========================================
+   MODAL OVERLAY
+========================================= */
+
+.production-orders-page .modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    background: rgba(24, 38, 30, 0.48);
+}
+
+.production-orders-page .modal {
+    width: 100%;
+    max-width: 550px;
+    padding: 24px;
+    background: #fff;
+    border: 1px solid #e5eae6;
+    border-radius: 10px;
+    box-shadow: 0 18px 55px rgba(0, 0, 0, 0.18);
+}
+
+/* =========================================
+   MODAL HEADER
+========================================= */
+
+.production-orders-page .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.production-orders-page .modal-header h2 {
+    margin: 0;
+    color: #26352f;
+    font-size: 19px;
+    font-weight: 700;
+}
+
+.production-orders-page .modal-header button {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 50%;
+    background: #f0f3f0;
+    color: #6d7b72;
+    cursor: pointer;
+    font-size: 20px;
+}
+
+.production-orders-page .modal-header button:hover {
+    background: #e3eae4;
+    color: #294b3c;
+}
+
+/* =========================================
+   PRODUCTION ORDER FORM
+========================================= */
+
+.production-orders-page .production-modal {
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.production-orders-page .production-modal .modal-header {
+    padding-bottom: 16px;
+    border-bottom: 1px solid #edf0ed;
+}
+
+.production-orders-page .production-modal .modal-header p {
+    margin: 5px 0 0;
+    color: #78847d;
+    font-size: 12px;
+}
+
+/* =========================================
+   FORM GROUPS
+========================================= */
+
+.production-orders-page .production-modal .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 0;
+    margin-bottom: 17px;
+}
+
+.production-orders-page .production-modal .form-group label {
+    color: #536159;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.production-orders-page .production-modal .form-group input,
+.production-orders-page .production-modal .form-group select,
+.production-orders-page .production-modal .form-group textarea {
+    width: 100%;
+    min-height: 40px;
+    box-sizing: border-box;
+    padding: 9px 11px;
+    border: 1px solid #dce3de;
+    border-radius: 6px;
+    background: #fff;
+    color: #35483d;
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.production-orders-page .production-modal .form-group textarea {
+    resize: vertical;
+}
+
+.production-orders-page .production-modal .form-group input:focus,
+.production-orders-page .production-modal .form-group select:focus,
+.production-orders-page .production-modal .form-group textarea:focus {
+    border-color: #648b72;
+    box-shadow: 0 0 0 2px rgba(100, 139, 114, 0.1);
+}
+
+.production-orders-page .production-modal .form-group input::placeholder,
+.production-orders-page .production-modal .form-group textarea::placeholder {
+    color: #9aa69d;
+}
+
+.production-orders-page .production-modal .form-group input:disabled,
+.production-orders-page .production-modal .form-group select:disabled {
+    color: #929d95;
+    background: #f5f7f5;
+    cursor: not-allowed;
+}
+
+/* =========================================
+   FORM ROW
+========================================= */
+
+.production-orders-page .production-modal .form-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+/* =========================================
+   MODAL ACTIONS
+========================================= */
+
+.production-orders-page .production-modal .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 22px;
+    padding-top: 16px;
+    border-top: 1px solid #edf0ed;
+}
+
+/* =========================================
+   SECONDARY BUTTON
+========================================= */
+
+.production-orders-page .production-modal .secondary-button {
+    padding: 9px 13px;
+    border: 1px solid #dce3de;
+    border-radius: 6px;
+    background: #edf1ed;
+    color: #42584c;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.production-orders-page .production-modal .secondary-button:hover:not(:disabled) {
+    background: #e1e9e2;
+}
+
+.production-orders-page .production-modal .primary-button:disabled,
+.production-orders-page .production-modal .secondary-button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* =========================================
+   RESPONSIVE DESIGN
+========================================= */
+
+@media (max-width: 900px) {
+    .production-orders-page .page-header {
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 550px) {
+    .production-orders-page .page-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .production-orders-page .page-header h1 {
+        font-size: 24px;
+    }
+
+    .production-orders-page .production-modal .form-row {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+
+    .production-orders-page .modal-overlay {
+        padding: 10px;
+    }
+
+    .production-orders-page .modal {
+        padding: 17px;
+    }
+
+    .production-orders-page .production-modal .modal-actions {
+        flex-direction: column-reverse;
+    }
+
+    .production-orders-page .production-modal .modal-actions button {
+        width: 100%;
+    }
+}
+
+
+/* Production Order List Panel */
+.production-orders-page .panel {
+    width: 100%;
+    min-width: 0;
+    padding: 20px;
+    background: #ffffff;
+    border: 1px solid #e5eae6;
+    border-radius: 10px;
+    box-sizing: border-box;
+}
+
+/* Panel Heading */
+.production-orders-page .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.production-orders-page .panel-header h2 {
+    margin: 0;
+    color: #304238;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+/* Record Count */
+.production-orders-page .record-count {
+    color: #78847d;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/* Responsive Table Wrapper */
+.production-orders-page .table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+/* Production Order Table */
+.production-orders-page .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.production-orders-page .data-table th {
+    padding: 12px;
+    background: #f6f8f6;
+    color: #78847d;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    border-bottom: 1px solid #e5eae6;
+}
+
+.production-orders-page .data-table td {
+    padding: 13px 12px;
+    color: #536159;
+    font-size: 12px;
+    border-bottom: 1px solid #edf0ed;
+}
+
+.production-orders-page .data-table tbody tr:hover {
+    background: #fafcf9;
+}
+
+.production-orders-page .data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.production-orders-page .data-table tbody td strong {
+    color: #304238;
+}
+
+/* Empty Table Message */
+.production-orders-page .data-table td[colspan] {
+    padding: 30px;
+    color: #89948d;
+    text-align: center;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .production-orders-page .panel {
+        padding: 14px;
+    }
+
+    .production-orders-page .panel-header {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 8px;
+    }
+}

@@ -1,6 +1,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
-import api from '../services/api'
+import api from '../../services/api'
+import './stocktransfer.css'
 
 function StockTransfersPage() {
     const [transfers, setTransfers] = useState([])

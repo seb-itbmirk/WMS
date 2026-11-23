@@ -1,6 +1,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
-import api from '../services/api'
+import api from '../../services/api'
+import './replenishment.css'
 
 function ReplenishmentPage() {
     const [items, setItems] = useState([])

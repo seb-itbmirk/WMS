@@ -1,6 +1,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
-import api from '../services/api'
+import api from '../../services/api'
+import './goodsreceipt.css'
 
 const inspectionStatuses = ['PENDING', 'APPROVED', 'REJECTED', 'QUARANTINED']
 
