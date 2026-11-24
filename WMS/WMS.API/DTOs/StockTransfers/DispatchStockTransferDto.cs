@@ -1,9 +1,8 @@
-﻿namespace WMS.API.DTOs.StockTransfers;
+﻿
+namespace WMS.API.DTOs.StockTransfers;
 
 public class DispatchStockTransferDto
 {
-    public long? DispatchedBy { get; set; }
-
     public List<DispatchStockTransferLineDto> Lines { get; set; } = new();
 }
 

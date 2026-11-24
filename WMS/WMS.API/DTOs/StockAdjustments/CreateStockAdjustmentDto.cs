@@ -8,7 +8,5 @@ namespace WMS.API.DTOs.StockAdjustments
         public long WarehouseId { get; set; }
 
         public string AdjustmentReason { get; set; } = null!;
-
-        public long? CreatedBy { get; set; }
     }
 }

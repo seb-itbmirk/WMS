@@ -104,6 +104,10 @@ public partial class WmsDbContext : DbContext
 
     public virtual DbSet<WarehouseZone> WarehouseZones { get; set; }
 
+    public virtual DbSet<ReplenishmentTask> ReplenishmentTasks { get; set; }
+
+    public virtual DbSet<ReplenishmentTaskLine> ReplenishmentTaskLines { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("pgcrypto");
@@ -140,6 +144,174 @@ public partial class WmsDbContext : DbContext
             entity.Property(e => e.Username)
                 .HasMaxLength(80)
                 .HasColumnName("username");
+
+
+            modelBuilder.Entity<ReplenishmentTask>(entity =>
+            {
+                entity.HasKey(e => e.ReplenishmentTaskId)
+                    .HasName("replenishment_tasks_pkey");
+
+                entity.ToTable("replenishment_tasks");
+
+                entity.HasIndex(e => e.TaskNumber)
+                    .IsUnique()
+                    .HasDatabaseName("replenishment_tasks_task_number_key");
+
+                entity.HasIndex(e => e.WarehouseId)
+                    .HasDatabaseName("idx_replenishment_tasks_warehouse");
+
+                entity.HasIndex(e => e.Status)
+                    .HasDatabaseName("idx_replenishment_tasks_status");
+
+                entity.HasIndex(e => e.AssignedTo)
+                    .HasDatabaseName("idx_replenishment_tasks_assigned_to");
+
+                entity.Property(e => e.ReplenishmentTaskId)
+                    .UseIdentityAlwaysColumn()
+                    .HasColumnName("replenishment_task_id");
+
+                entity.Property(e => e.TaskNumber)
+                    .HasMaxLength(50)
+                    .HasColumnName("task_number");
+
+                entity.Property(e => e.WarehouseId)
+                    .HasColumnName("warehouse_id");
+
+                entity.Property(e => e.Status)
+                    .HasMaxLength(30)
+                    .HasDefaultValueSql("'DRAFT'::character varying")
+                    .HasColumnName("status");
+
+                entity.Property(e => e.CreatedBy)
+                    .HasColumnName("created_by");
+
+                entity.Property(e => e.AssignedTo)
+                    .HasColumnName("assigned_to");
+
+                entity.Property(e => e.CompletedBy)
+                    .HasColumnName("completed_by");
+
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("now()")
+                    .HasColumnName("created_at");
+
+                entity.Property(e => e.StartedAt)
+                    .HasColumnName("started_at");
+
+                entity.Property(e => e.CompletedAt)
+                    .HasColumnName("completed_at");
+
+                entity.Property(e => e.Notes)
+                    .HasColumnName("notes");
+
+                entity.HasOne(e => e.Warehouse)
+                    .WithMany()
+                    .HasForeignKey(e => e.WarehouseId)
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("replenishment_tasks_warehouse_id_fkey");
+
+                entity.HasOne(e => e.CreatedByNavigation)
+                    .WithMany()
+                    .HasForeignKey(e => e.CreatedBy)
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("replenishment_tasks_created_by_fkey");
+
+                entity.HasOne(e => e.AssignedToNavigation)
+                    .WithMany()
+                    .HasForeignKey(e => e.AssignedTo)
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("replenishment_tasks_assigned_to_fkey");
+
+                entity.HasOne(e => e.CompletedByNavigation)
+                    .WithMany()
+                    .HasForeignKey(e => e.CompletedBy)
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("replenishment_tasks_completed_by_fkey");
+            });
+
+            modelBuilder.Entity<ReplenishmentTaskLine>(entity =>
+            {
+                entity.HasKey(e => e.ReplenishmentTaskLineId)
+                    .HasName("replenishment_task_lines_pkey");
+
+                entity.ToTable("replenishment_task_lines");
+
+                entity.HasIndex(e => e.ReplenishmentTaskId)
+                    .HasDatabaseName("idx_replenishment_task_lines_task");
+
+                entity.HasIndex(e => e.LotId)
+                    .HasDatabaseName("idx_replenishment_task_lines_lot");
+
+                entity.HasIndex(e => e.SourceBinId)
+                    .HasDatabaseName("idx_replenishment_task_lines_source_bin");
+
+                entity.HasIndex(e => e.DestinationBinId)
+                    .HasDatabaseName("idx_replenishment_task_lines_destination_bin");
+
+                entity.HasIndex(e => new
+                {
+                    e.ReplenishmentTaskId,
+                    e.LotId,
+                    e.SourceBinId,
+                    e.DestinationBinId
+                })
+                .IsUnique()
+                .HasDatabaseName("replenishment_task_lines_unique");
+
+                entity.Property(e => e.ReplenishmentTaskLineId)
+                    .UseIdentityAlwaysColumn()
+                    .HasColumnName("replenishment_task_line_id");
+
+                entity.Property(e => e.ReplenishmentTaskId)
+                    .HasColumnName("replenishment_task_id");
+
+                entity.Property(e => e.LotId)
+                    .HasColumnName("lot_id");
+
+                entity.Property(e => e.SourceBinId)
+                    .HasColumnName("source_bin_id");
+
+                entity.Property(e => e.DestinationBinId)
+                    .HasColumnName("destination_bin_id");
+
+                entity.Property(e => e.RequestedQuantity)
+                    .HasPrecision(18, 4)
+                    .HasColumnName("requested_quantity");
+
+                entity.Property(e => e.MovedQuantity)
+                    .HasPrecision(18, 4)
+                    .HasDefaultValue(0m)
+                    .HasColumnName("moved_quantity");
+
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("now()")
+                    .HasColumnName("created_at");
+
+                entity.HasOne(e => e.ReplenishmentTask)
+                    .WithMany(e => e.ReplenishmentTaskLines)
+                    .HasForeignKey(e => e.ReplenishmentTaskId)
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("replenishment_task_lines_replenishment_task_id_fkey");
+
+                entity.HasOne(e => e.Lot)
+                    .WithMany()
+                    .HasForeignKey(e => e.LotId)
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("replenishment_task_lines_lot_id_fkey");
+
+                entity.HasOne(e => e.SourceBin)
+                    .WithMany()
+                    .HasForeignKey(e => e.SourceBinId)
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("replenishment_task_lines_source_bin_id_fkey");
+
+                entity.HasOne(e => e.DestinationBin)
+                    .WithMany()
+                    .HasForeignKey(e => e.DestinationBinId)
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("replenishment_task_lines_destination_bin_id_fkey");
+            });
+
 
             entity.HasMany(d => d.Roles).WithMany(p => p.Users)
                 .UsingEntity<Dictionary<string, object>>(

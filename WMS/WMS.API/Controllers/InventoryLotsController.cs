@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WMS.API.Data;
 using WMS.API.Models;
@@ -18,6 +20,7 @@ namespace WMS.API.Controllers
         }
 
         // GET: api/inventory-lots
+        [Authorize(Policy = "Permission:inventory.view")]
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
@@ -45,6 +48,7 @@ namespace WMS.API.Controllers
         }
 
         // GET: api/inventory-lots/1
+        [Authorize(Policy = "Permission:inventory.view")]
         [HttpGet("{id:long}")]
         public async Task<IActionResult> GetById(long id)
         {
@@ -75,6 +79,7 @@ namespace WMS.API.Controllers
         }
 
         // GET: api/inventory-lots/item/1
+        [Authorize(Policy = "Permission:inventory.view")]
         [HttpGet("item/{itemId:long}")]
         public async Task<IActionResult> GetByItem(long itemId)
         {
@@ -105,6 +110,7 @@ namespace WMS.API.Controllers
         }
 
         // POST: api/inventory-lots
+        [Authorize(Policy = "Permission:inventory.manage")]
         [HttpPost]
         public async Task<IActionResult> Create(CreateInventoryLotDto dto)
         {
@@ -149,9 +155,11 @@ namespace WMS.API.Controllers
                 return BadRequest("Selected item does not exist or is inactive.");
 
             // Check duplicate batch code for the same item
+            var batchCode = dto.BatchCode.Trim();
+
             var batchExists = await _context.InventoryLots
                 .AnyAsync(l => l.ItemId == dto.ItemId &&
-                               l.BatchCode == dto.BatchCode.Trim());
+                               l.BatchCode == batchCode);
 
             if (batchExists)
                 return Conflict("This batch code already exists for the selected item.");
@@ -160,7 +168,7 @@ namespace WMS.API.Controllers
             var lot = new InventoryLot
             {
                 ItemId = dto.ItemId,
-                BatchCode = dto.BatchCode.Trim(),
+                BatchCode = batchCode,
                 SupplierBatchCode = dto.SupplierBatchCode,
                 ManufactureDate = dto.ManufactureDate,
                 ExpiryDate = dto.ExpiryDate,

@@ -1,6 +1,8 @@
 ﻿
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using WMS.API.Data;
 using WMS.API.DTOs;
 using WMS.API.Models;
@@ -9,6 +11,7 @@ namespace WMS.API.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
+[Authorize]
 public class WarehousesController : ControllerBase
 {
     private readonly WmsDbContext _context;
@@ -18,12 +21,38 @@ public class WarehousesController : ControllerBase
         _context = context;
     }
 
+    // Get authenticated user's ID from JWT
+    private bool TryGetCurrentUserId(out long userId)
+    {
+        var userIdClaim = User.FindFirstValue(
+            ClaimTypes.NameIdentifier);
+
+        return long.TryParse(userIdClaim, out userId);
+    }
+
+    // Check whether the logged-in user has access to a warehouse
+    private Task<bool> HasWarehouseAccessAsync(
+        long userId,
+        long warehouseId)
+    {
+        return _context.AppUsers.AnyAsync(u =>
+            u.UserId == userId &&
+            u.Warehouses.Any(w =>
+                w.WarehouseId == warehouseId));
+    }
+
     // GET: api/warehouses
     [HttpGet]
+    [Authorize(Policy = "Permission:warehouses.view")]
     public async Task<IActionResult> GetWarehouses()
     {
-        var warehouses = await _context.Warehouses
+        if (!TryGetCurrentUserId(out var userId))
+            return Unauthorized();
+
+        var warehouses = await _context.AppUsers
             .AsNoTracking()
+            .Where(u => u.UserId == userId)
+            .SelectMany(u => u.Warehouses)
             .OrderBy(w => w.WarehouseCode)
             .ToListAsync();
 
@@ -32,10 +61,16 @@ public class WarehousesController : ControllerBase
 
     // GET: api/warehouses/1
     [HttpGet("{id:long}")]
+    [Authorize(Policy = "Permission:warehouses.view")]
     public async Task<IActionResult> GetWarehouse(long id)
     {
-        var warehouse = await _context.Warehouses
+        if (!TryGetCurrentUserId(out var userId))
+            return Unauthorized();
+
+        var warehouse = await _context.AppUsers
             .AsNoTracking()
+            .Where(u => u.UserId == userId)
+            .SelectMany(u => u.Warehouses)
             .FirstOrDefaultAsync(w => w.WarehouseId == id);
 
         if (warehouse == null)
@@ -51,6 +86,7 @@ public class WarehousesController : ControllerBase
 
     // POST: api/warehouses
     [HttpPost]
+    [Authorize(Policy = "Permission:warehouses.create")]
     public async Task<IActionResult> CreateWarehouse(
         [FromBody] CreateWarehouseDto dto)
     {
@@ -126,14 +162,12 @@ public class WarehousesController : ControllerBase
             });
         }
 
-        return CreatedAtAction(
-            nameof(GetWarehouse),
-            new { id = warehouse.WarehouseId },
-            warehouse);
+        return StatusCode(201, warehouse);
     }
 
     // PUT: api/warehouses/1
     [HttpPut("{id:long}")]
+    [Authorize(Policy = "Permission:warehouses.update")]
     public async Task<IActionResult> UpdateWarehouse(
         long id,
         [FromBody] UpdateWarehouseDto dto)
@@ -143,6 +177,17 @@ public class WarehousesController : ControllerBase
             return BadRequest(new
             {
                 message = "Warehouse data is required."
+            });
+        }
+
+        if (!TryGetCurrentUserId(out var userId))
+            return Unauthorized();
+
+        if (!await HasWarehouseAccessAsync(userId, id))
+        {
+            return NotFound(new
+            {
+                message = "Warehouse not found."
             });
         }
 
@@ -194,8 +239,20 @@ public class WarehousesController : ControllerBase
 
     // PATCH: api/warehouses/1/deactivate
     [HttpPatch("{id:long}/deactivate")]
+    [Authorize(Policy = "Permission:warehouses.deactivate")]
     public async Task<IActionResult> DeactivateWarehouse(long id)
     {
+        if (!TryGetCurrentUserId(out var userId))
+            return Unauthorized();
+
+        if (!await HasWarehouseAccessAsync(userId, id))
+        {
+            return NotFound(new
+            {
+                message = "Warehouse not found."
+            });
+        }
+
         var warehouse = await _context.Warehouses
             .FirstOrDefaultAsync(w => w.WarehouseId == id);
 

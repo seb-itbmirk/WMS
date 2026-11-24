@@ -1,5 +1,7 @@
 ﻿
 using System.Data;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WMS.API.Data;
@@ -10,6 +12,7 @@ namespace WMS.API.Controllers
 {
     [Route("api/putaway-tasks")]
     [ApiController]
+    [Authorize]
     public class PutawayTasksController : ControllerBase
     {
         private readonly WmsDbContext _context;
@@ -19,12 +22,67 @@ namespace WMS.API.Controllers
             _context = context;
         }
 
+        private long? GetCurrentUserId()
+        {
+            var userIdClaim = User.FindFirstValue(
+                ClaimTypes.NameIdentifier);
+
+            return long.TryParse(userIdClaim, out var userId)
+                ? userId
+                : null;
+        }
+
+        private async Task<List<long>> GetAccessibleWarehouseIdsAsync()
+        {
+            var userId = GetCurrentUserId();
+
+            if (!userId.HasValue)
+                return new List<long>();
+
+            return await _context.Database
+                .SqlQuery<long>($"""
+                    SELECT warehouse_id AS "Value"
+                    FROM user_warehouse_access
+                    WHERE user_id = {userId.Value}
+                    """)
+                .ToListAsync();
+        }
+
+        private async Task<bool> HasWarehouseAccessAsync(long warehouseId)
+        {
+            var userId = GetCurrentUserId();
+
+            if (!userId.HasValue)
+                return false;
+
+            return await _context.Database
+                .SqlQuery<bool>($"""
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM user_warehouse_access
+                        WHERE user_id = {userId.Value}
+                          AND warehouse_id = {warehouseId}
+                    ) AS "Value"
+                    """)
+                .SingleAsync();
+        }
+
         // GET: api/putaway-tasks
+        [Authorize(Policy = "Permission:putaway.view")]
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
+            var warehouseIds = await GetAccessibleWarehouseIdsAsync();
+
+            var accessibleReceiptIds = _context.GoodsReceipts
+                .Where(r => warehouseIds.Contains(r.WarehouseId))
+                .Select(r => r.ReceiptId);
+
             var tasks = await _context.PutawayTasks
                 .AsNoTracking()
+                .Where(p => _context.GoodsReceiptLines.Any(r =>
+                    r.ReceiptLineId == p.ReceiptLineId &&
+                    accessibleReceiptIds.Contains(r.ReceiptId)))
                 .OrderByDescending(p => p.PutawayId)
                 .Select(p => new
                 {
@@ -51,12 +109,23 @@ namespace WMS.API.Controllers
         }
 
         // GET: api/putaway-tasks/1
+        [Authorize(Policy = "Permission:putaway.view")]
         [HttpGet("{id:long}")]
         public async Task<IActionResult> GetById(long id)
         {
+            var warehouseIds = await GetAccessibleWarehouseIdsAsync();
+
+            var accessibleReceiptIds = _context.GoodsReceipts
+                .Where(r => warehouseIds.Contains(r.WarehouseId))
+                .Select(r => r.ReceiptId);
+
             var task = await _context.PutawayTasks
                 .AsNoTracking()
-                .Where(p => p.PutawayId == id)
+                .Where(p =>
+                    p.PutawayId == id &&
+                    _context.GoodsReceiptLines.Any(r =>
+                        r.ReceiptLineId == p.ReceiptLineId &&
+                        accessibleReceiptIds.Contains(r.ReceiptId)))
                 .Select(p => new
                 {
                     p.PutawayId,
@@ -90,6 +159,7 @@ namespace WMS.API.Controllers
         }
 
         // POST: api/putaway-tasks
+        [Authorize(Policy = "Permission:putaway.manage")]
         [HttpPost]
         public async Task<IActionResult> Create(
             [FromBody] CreatePutawayTaskDto dto)
@@ -158,6 +228,14 @@ namespace WMS.API.Controllers
                     return BadRequest(new
                     {
                         message = "Goods receipt must be posted before creating a putaway task."
+                    });
+                }
+
+                if (!await HasWarehouseAccessAsync(goodsReceipt.WarehouseId))
+                {
+                    return NotFound(new
+                    {
+                        message = "Goods receipt line not found."
                     });
                 }
 
@@ -340,13 +418,34 @@ namespace WMS.API.Controllers
                 {
                     bool userExists = await _context.AppUsers
                         .AnyAsync(u =>
-                            u.UserId == dto.AssignedTo.Value);
+                            u.UserId == dto.AssignedTo.Value &&
+                            u.IsActive);
 
                     if (!userExists)
                     {
                         return BadRequest(new
                         {
-                            message = "Assigned user does not exist."
+                            message = "Assigned user does not exist or is inactive."
+                        });
+                    }
+
+                    bool assignedUserHasWarehouseAccess =
+                        await _context.Database
+                            .SqlQuery<bool>($"""
+                                SELECT EXISTS (
+                                    SELECT 1
+                                    FROM user_warehouse_access
+                                    WHERE user_id = {dto.AssignedTo.Value}
+                                      AND warehouse_id = {goodsReceipt.WarehouseId}
+                                ) AS "Value"
+                                """)
+                            .SingleAsync();
+
+                    if (!assignedUserHasWarehouseAccess)
+                    {
+                        return BadRequest(new
+                        {
+                            message = "The assigned user does not have access to the goods receipt warehouse."
                         });
                     }
                 }
@@ -355,7 +454,7 @@ namespace WMS.API.Controllers
                 {
                     ReceiptLineId = dto.ReceiptLineId,
                     LotId = dto.LotId,
-                    FromBinId = dto.FromBinId,
+                    FromBinId = fromBinId,
                     ToBinId = dto.ToBinId,
                     Quantity = dto.Quantity,
                     Status = "PENDING",
@@ -391,6 +490,7 @@ namespace WMS.API.Controllers
         }
 
         // POST: api/putaway-tasks/1/complete
+        [Authorize(Policy = "Permission:putaway.manage")]
         [HttpPost("{id:long}/complete")]
         public async Task<IActionResult> Complete(long id)
         {
@@ -460,6 +560,14 @@ namespace WMS.API.Controllers
                     return BadRequest(new
                     {
                         message = "The associated goods receipt must be posted."
+                    });
+                }
+
+                if (!await HasWarehouseAccessAsync(goodsReceipt.WarehouseId))
+                {
+                    return NotFound(new
+                    {
+                        message = "Putaway task not found."
                     });
                 }
 

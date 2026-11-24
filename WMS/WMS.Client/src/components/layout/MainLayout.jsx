@@ -11,13 +11,18 @@ function MainLayout({
 }) {
     return (
         <div className="layout">
-            <Sidebar
-                page={page}
-                setPage={setPage}
-                apiError={apiError}
-                loading={loading}
-            />
 
+            {/* Hover-triggered Sidebar */}
+            <div className="sidebar-hover-zone">
+                <Sidebar
+                    page={page}
+                    setPage={setPage}
+                    apiError={apiError}
+                    loading={loading}
+                />
+            </div>
+
+            {/* Main Content */}
             <main className="main-area">
                 <TopHeader page={page} />
 
@@ -32,6 +37,7 @@ function MainLayout({
                     {children}
                 </div>
             </main>
+
         </div>
     )
 }

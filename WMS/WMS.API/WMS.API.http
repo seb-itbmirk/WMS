@@ -555,12 +555,34 @@ Content-Type:application/json
   "unitOfMeasure": "pH"
 }
 
-###
-POST https://localhost:7100/api/putaway-tasks/1/complete
 
+###
+GET https://localhost:7100/api/replenishment-tasks
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjMiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoid2FyZWhvdXNlX3Rlc3QiLCJqdGkiOiJkYTU5NTlhMS1kZmU0LTQyYzktODg0OC0xZjAzMjliZjYxYzIiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJXYXJlaG91c2UgU3RhZmYiLCJuYmYiOjE3OTU0OTk2MzgsImV4cCI6MTc5NTUwMzIzOCwiaXNzIjoiV01TLkFQSSIsImF1ZCI6IldNUy5SZWFjdCJ9.igLza9gkhKeutjjVMExu6tNHFA7Nnh8uPV_GzFGFou4
+ 
 ### 
-POST https://localhost:7100/api/stock-adjustments/4/post
+POST https://localhost:7100/api/auth/login
 Content-Type:application/json
 {
-  "postedBy": null
+  "username": "warehouse_test",
+  "password": "bastapassword"
+}
+
+### 
+POST https://localhost:7100/api/replenishment-tasks/1/complete
+Content-Type:application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6IjMiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1lIjoid2FyZWhvdXNlX3Rlc3QiLCJqdGkiOiJkYTU5NTlhMS1kZmU0LTQyYzktODg0OC0xZjAzMjliZjYxYzIiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJXYXJlaG91c2UgU3RhZmYiLCJuYmYiOjE3OTU0OTk2MzgsImV4cCI6MTc5NTUwMzIzOCwiaXNzIjoiV01TLkFQSSIsImF1ZCI6IldNUy5SZWFjdCJ9.igLza9gkhKeutjjVMExu6tNHFA7Nnh8uPV_GzFGFou4
+
+
+{
+  "message": "Replenishment inventory moved successfully.",
+  "replenishmentTaskId": 1,
+  "replenishmentTaskLineId": 1,
+  "lotId": 3,
+  "sourceBinId": 1,
+  "destinationBinId": 4,
+  "movedQuantity": 50,
+  "totalMovedQuantity": 50,
+  "remainingTaskQuantity": 0,
+  "status": "IN_PROGRESS"
 }

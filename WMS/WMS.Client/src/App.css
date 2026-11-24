@@ -580,6 +580,43 @@
     }
 }
 
+
+.warehouse-clickable,
+.warehouse-name-button {
+    cursor: pointer;
+    font: inherit;
+}
+
+.warehouse-clickable {
+    border: none;
+}
+
+.warehouse-name-button {
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font-weight: inherit;
+    text-align: left;
+}
+
+.warehouse-name-button:hover {
+    color: #648b72;
+}
+
+.warehouse-clickable:disabled,
+.warehouse-name-button:disabled {
+    cursor: default;
+}
+
+.warehouse-name-button:focus-visible,
+.warehouse-clickable:focus-visible {
+    outline: 2px solid #648b72;
+    outline-offset: 3px;
+    border-radius: 3px;
+}
+
+
 @media (max-width: 480px) {
     .metrics-grid {
         grid-template-columns: 1fr;

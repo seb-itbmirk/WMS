@@ -1,5 +1,6 @@
-﻿
-using System.Data;
+﻿using System.Data;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WMS.API.Data;
@@ -10,6 +11,7 @@ namespace WMS.API.Controllers
 {
     [Route("api/goods-receipts")]
     [ApiController]
+    [Authorize]
     public class GoodsReceiptsController : ControllerBase
     {
         private readonly WmsDbContext _context;
@@ -19,12 +21,66 @@ namespace WMS.API.Controllers
             _context = context;
         }
 
+        // Gets the authenticated user's ID from the JWT.
+        private long? GetCurrentUserId()
+        {
+            var userId = User.FindFirstValue(
+                ClaimTypes.NameIdentifier);
+
+            return long.TryParse(userId, out var id)
+                ? id
+                : null;
+        }
+
+        // Gets all warehouses assigned to the authenticated user.
+        private async Task<List<long>> GetAccessibleWarehouseIdsAsync()
+        {
+            var userId = GetCurrentUserId();
+
+            if (!userId.HasValue)
+                return new List<long>();
+
+            return await _context.Database
+                .SqlQuery<long>($"""
+                    SELECT warehouse_id AS "Value"
+                    FROM user_warehouse_access
+                    WHERE user_id = {userId.Value}
+                    """)
+                .ToListAsync();
+        }
+
+        // Checks whether the user can access a specific warehouse.
+        private async Task<bool> HasWarehouseAccessAsync(
+            long warehouseId)
+        {
+            var userId = GetCurrentUserId();
+
+            if (!userId.HasValue)
+                return false;
+
+            return await _context.Database
+                .SqlQuery<bool>($"""
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM user_warehouse_access
+                        WHERE user_id = {userId.Value}
+                          AND warehouse_id = {warehouseId}
+                    ) AS "Value"
+                    """)
+                .SingleAsync();
+        }
+
         // GET: api/goods-receipts
         [HttpGet]
+        [Authorize(Policy = "Permission:receiving.view")]
         public async Task<IActionResult> GetAll()
         {
+            var warehouseIds =
+                await GetAccessibleWarehouseIdsAsync();
+
             var receipts = await _context.GoodsReceipts
                 .AsNoTracking()
+                .Where(r => warehouseIds.Contains(r.WarehouseId))
                 .OrderByDescending(r => r.ReceiptDate)
                 .Select(r => new
                 {
@@ -62,11 +118,17 @@ namespace WMS.API.Controllers
 
         // GET: api/goods-receipts/1
         [HttpGet("{id:long}")]
+        [Authorize(Policy = "Permission:receiving.view")]
         public async Task<IActionResult> GetById(long id)
         {
+            var warehouseIds =
+                await GetAccessibleWarehouseIdsAsync();
+
             var receipt = await _context.GoodsReceipts
                 .AsNoTracking()
-                .Where(r => r.ReceiptId == id)
+                .Where(r =>
+                    r.ReceiptId == id &&
+                    warehouseIds.Contains(r.WarehouseId))
                 .Select(r => new
                 {
                     r.ReceiptId,
@@ -112,6 +174,7 @@ namespace WMS.API.Controllers
 
         // POST: api/goods-receipts
         [HttpPost]
+        [Authorize(Policy = "Permission:receiving.manage")]
         public async Task<IActionResult> Create(
             [FromBody] CreateGoodsReceiptDto dto)
         {
@@ -120,6 +183,16 @@ namespace WMS.API.Controllers
                 return BadRequest(new
                 {
                     message = "Goods receipt details are required."
+                });
+            }
+
+            var currentUserId = GetCurrentUserId();
+
+            if (!currentUserId.HasValue)
+            {
+                return Unauthorized(new
+                {
+                    message = "Unable to identify the authenticated user."
                 });
             }
 
@@ -144,6 +217,18 @@ namespace WMS.API.Controllers
                 return BadRequest(new
                 {
                     message = "At least one receipt line is required."
+                });
+            }
+
+            // Enforce warehouse access before creating the receipt.
+            var hasWarehouseAccess =
+                await HasWarehouseAccessAsync(dto.WarehouseId);
+
+            if (!hasWarehouseAccess)
+            {
+                return NotFound(new
+                {
+                    message = "Warehouse not found."
                 });
             }
 
@@ -340,7 +425,10 @@ namespace WMS.API.Controllers
                             DateTimeKind.Utc)
                         : DateTime.UtcNow,
                     DeliveryReference = dto.DeliveryReference,
-                    ReceivedBy = dto.ReceivedBy,
+
+                    // Never accept ReceivedBy from the request.
+                    ReceivedBy = currentUserId.Value,
+
                     Status = "DRAFT"
                 };
 
@@ -387,8 +475,19 @@ namespace WMS.API.Controllers
 
         // POST: api/goods-receipts/1/post
         [HttpPost("{id:long}/post")]
+        [Authorize(Policy = "Permission:receiving.manage")]
         public async Task<IActionResult> Post(long id)
         {
+            var currentUserId = GetCurrentUserId();
+
+            if (!currentUserId.HasValue)
+            {
+                return Unauthorized(new
+                {
+                    message = "Unable to identify the authenticated user."
+                });
+            }
+
             await using var transaction =
                 await _context.Database.BeginTransactionAsync(
                     IsolationLevel.Serializable);
@@ -403,6 +502,18 @@ namespace WMS.API.Controllers
                     .FirstOrDefaultAsync(r => r.ReceiptId == id);
 
                 if (receipt == null)
+                {
+                    return NotFound(new
+                    {
+                        message = "Goods receipt not found."
+                    });
+                }
+
+                // Enforce warehouse access before posting.
+                var hasWarehouseAccess =
+                    await HasWarehouseAccessAsync(receipt.WarehouseId);
+
+                if (!hasWarehouseAccess)
                 {
                     return NotFound(new
                     {
@@ -593,8 +704,10 @@ namespace WMS.API.Controllers
                     ReferenceNumber = receipt.ReceiptNumber,
                     Remarks = $"Goods receipt posting: {receipt.ReceiptNumber}",
                     Status = "POSTED",
-                    CreatedBy = receipt.ReceivedBy,
-                    PostedBy = receipt.ReceivedBy,
+
+                    // Use the authenticated user for audit fields.
+                    CreatedBy = currentUserId.Value,
+                    PostedBy = currentUserId.Value,
                     PostedAt = DateTime.UtcNow
                 };
 

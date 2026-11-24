@@ -12,8 +12,6 @@
 
         public string? DeliveryReference { get; set; }
 
-        public long? ReceivedBy { get; set; }
-
         public long? ReceivingBinId { get; set; }
 
         public List<CreateGoodsReceiptLineDto> Lines { get; set; } = new();

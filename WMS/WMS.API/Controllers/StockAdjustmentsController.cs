@@ -1,4 +1,6 @@
 ﻿
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WMS.API.Data;
@@ -9,6 +11,7 @@ namespace WMS.API.Controllers
 {
     [Route("api/stock-adjustments")]
     [ApiController]
+    [Authorize]
     public class StockAdjustmentsController : ControllerBase
     {
         private readonly WmsDbContext _context;
@@ -18,12 +21,81 @@ namespace WMS.API.Controllers
             _context = context;
         }
 
+        // ============================================
+        // AUTHORIZATION HELPERS
+        // ============================================
+
+        private long? GetCurrentUserId()
+        {
+            var userIdClaim = User.FindFirstValue(
+                ClaimTypes.NameIdentifier);
+
+            return long.TryParse(userIdClaim, out var userId)
+                ? userId
+                : null;
+        }
+
+        private async Task<List<long>> GetAccessibleWarehouseIdsAsync()
+        {
+            var userId = GetCurrentUserId();
+
+            if (!userId.HasValue)
+                return new List<long>();
+
+            return await _context.Database
+                .SqlQuery<long>($"""
+                    SELECT warehouse_id AS "Value"
+                    FROM user_warehouse_access
+                    WHERE user_id = {userId.Value}
+                    """)
+                .ToListAsync();
+        }
+
+        private async Task<bool> HasWarehouseAccessAsync(long warehouseId)
+        {
+            var userId = GetCurrentUserId();
+
+            if (!userId.HasValue)
+                return false;
+
+            return await _context.Database
+                .SqlQuery<bool>($"""
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM user_warehouse_access
+                        WHERE user_id = {userId.Value}
+                          AND warehouse_id = {warehouseId}
+                    ) AS "Value"
+                    """)
+                .SingleAsync();
+        }
+
+        private async Task<StockAdjustment?> LockAdjustmentAsync(long id)
+        {
+            return await _context.StockAdjustments
+                .FromSqlInterpolated($"""
+                    SELECT *
+                    FROM stock_adjustments
+                    WHERE adjustment_id = {id}
+                    FOR UPDATE
+                    """)
+                .FirstOrDefaultAsync();
+        }
+
+        // ============================================
         // GET: api/stock-adjustments
+        // Permission: inventory.view
+        // ============================================
+
+        [Authorize(Policy = "Permission:inventory.view")]
         [HttpGet]
         public async Task<IActionResult> GetAdjustments()
         {
+            var warehouseIds = await GetAccessibleWarehouseIdsAsync();
+
             var adjustments = await _context.StockAdjustments
                 .AsNoTracking()
+                .Where(a => warehouseIds.Contains(a.WarehouseId))
                 .OrderByDescending(a => a.CreatedAt)
                 .ThenByDescending(a => a.AdjustmentId)
                 .Select(a => new
@@ -43,7 +115,12 @@ namespace WMS.API.Controllers
             return Ok(adjustments);
         }
 
+        // ============================================
         // GET: api/stock-adjustments/{id}
+        // Permission: inventory.view
+        // ============================================
+
+        [Authorize(Policy = "Permission:inventory.view")]
         [HttpGet("{id:long}")]
         public async Task<IActionResult> GetAdjustment(long id)
         {
@@ -55,9 +132,13 @@ namespace WMS.API.Controllers
                 });
             }
 
+            var warehouseIds = await GetAccessibleWarehouseIdsAsync();
+
             var adjustment = await _context.StockAdjustments
                 .AsNoTracking()
-                .Where(a => a.AdjustmentId == id)
+                .Where(a =>
+                    a.AdjustmentId == id &&
+                    warehouseIds.Contains(a.WarehouseId))
                 .Select(a => new
                 {
                     a.AdjustmentId,
@@ -69,6 +150,7 @@ namespace WMS.API.Controllers
                     a.CreatedBy,
                     a.CreatedAt,
                     a.PostedAt,
+
                     Lines = a.StockAdjustmentLines
                         .OrderBy(l => l.AdjustmentLineId)
                         .Select(l => new
@@ -99,7 +181,12 @@ namespace WMS.API.Controllers
             return Ok(adjustment);
         }
 
+        // ============================================
         // POST: api/stock-adjustments
+        // Permission: inventory.adjust
+        // ============================================
+
+        [Authorize(Policy = "Permission:inventory.adjust")]
         [HttpPost]
         public async Task<IActionResult> CreateAdjustment(
             [FromBody] CreateStockAdjustmentDto dto)
@@ -111,6 +198,11 @@ namespace WMS.API.Controllers
                     message = "Adjustment details are required."
                 });
             }
+
+            var currentUserId = GetCurrentUserId();
+
+            if (!currentUserId.HasValue)
+                return Unauthorized();
 
             if (string.IsNullOrWhiteSpace(dto.AdjustmentNumber))
             {
@@ -155,6 +247,14 @@ namespace WMS.API.Controllers
                 });
             }
 
+            if (!await HasWarehouseAccessAsync(dto.WarehouseId))
+            {
+                return NotFound(new
+                {
+                    message = "Warehouse not found."
+                });
+            }
+
             var warehouseExists = await _context.Warehouses
                 .AsNoTracking()
                 .AnyAsync(w =>
@@ -170,7 +270,8 @@ namespace WMS.API.Controllers
             }
 
             var numberExists = await _context.StockAdjustments
-                .AnyAsync(a => a.AdjustmentNumber == adjustmentNumber);
+                .AnyAsync(a =>
+                    a.AdjustmentNumber == adjustmentNumber);
 
             if (numberExists)
             {
@@ -180,28 +281,13 @@ namespace WMS.API.Controllers
                 });
             }
 
-            if (dto.CreatedBy.HasValue)
-            {
-                var userExists = await _context.AppUsers
-                    .AsNoTracking()
-                    .AnyAsync(u => u.UserId == dto.CreatedBy.Value);
-
-                if (!userExists)
-                {
-                    return BadRequest(new
-                    {
-                        message = "Created by user does not exist."
-                    });
-                }
-            }
-
             var adjustment = new StockAdjustment
             {
                 AdjustmentNumber = adjustmentNumber,
                 WarehouseId = dto.WarehouseId,
                 AdjustmentReason = adjustmentReason,
                 Status = "DRAFT",
-                CreatedBy = dto.CreatedBy,
+                CreatedBy = currentUserId.Value,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -224,7 +310,12 @@ namespace WMS.API.Controllers
                 });
         }
 
+        // ============================================
         // POST: api/stock-adjustments/{id}/lines
+        // Permission: inventory.adjust
+        // ============================================
+
+        [Authorize(Policy = "Permission:inventory.adjust")]
         [HttpPost("{id:long}/lines")]
         public async Task<IActionResult> AddAdjustmentLine(
             long id,
@@ -277,6 +368,14 @@ namespace WMS.API.Controllers
                     });
                 }
 
+                if (!await HasWarehouseAccessAsync(adjustment.WarehouseId))
+                {
+                    return NotFound(new
+                    {
+                        message = "Stock adjustment not found."
+                    });
+                }
+
                 if (adjustment.Status != "DRAFT")
                 {
                     return BadRequest(new
@@ -299,7 +398,8 @@ namespace WMS.API.Controllers
                     });
                 }
 
-                if (bin.Zone.WarehouseId != adjustment.WarehouseId)
+                if (bin.Zone == null ||
+                    bin.Zone.WarehouseId != adjustment.WarehouseId)
                 {
                     return BadRequest(new
                     {
@@ -309,7 +409,8 @@ namespace WMS.API.Controllers
 
                 var lot = await _context.InventoryLots
                     .Include(l => l.Item)
-                    .FirstOrDefaultAsync(l => l.LotId == dto.LotId);
+                    .FirstOrDefaultAsync(l =>
+                        l.LotId == dto.LotId);
 
                 if (lot == null)
                 {
@@ -340,7 +441,8 @@ namespace WMS.API.Controllers
                         b.BinId == dto.BinId &&
                         b.StockStatus == "AVAILABLE");
 
-                decimal systemQuantity = balance?.QuantityOnHand ?? 0;
+                decimal systemQuantity =
+                    balance?.QuantityOnHand ?? 0m;
 
                 var adjustmentLine = new StockAdjustmentLine
                 {
@@ -349,7 +451,8 @@ namespace WMS.API.Controllers
                     BinId = dto.BinId,
                     SystemQuantity = systemQuantity,
                     CountedQuantity = dto.CountedQuantity,
-                    DifferenceQuantity = dto.CountedQuantity - systemQuantity
+                    DifferenceQuantity =
+                        dto.CountedQuantity - systemQuantity
                 };
 
                 _context.StockAdjustmentLines.Add(adjustmentLine);
@@ -380,7 +483,12 @@ namespace WMS.API.Controllers
             }
         }
 
+        // ============================================
         // PUT: api/stock-adjustments/{id}/lines/{lineId}
+        // Permission: inventory.adjust
+        // ============================================
+
+        [Authorize(Policy = "Permission:inventory.adjust")]
         [HttpPut("{id:long}/lines/{lineId:long}")]
         public async Task<IActionResult> UpdateAdjustmentLine(
             long id,
@@ -434,6 +542,14 @@ namespace WMS.API.Controllers
                     });
                 }
 
+                if (!await HasWarehouseAccessAsync(adjustment.WarehouseId))
+                {
+                    return NotFound(new
+                    {
+                        message = "Stock adjustment not found."
+                    });
+                }
+
                 if (adjustment.Status != "DRAFT")
                 {
                     return BadRequest(new
@@ -469,7 +585,8 @@ namespace WMS.API.Controllers
                     });
                 }
 
-                if (bin.Zone.WarehouseId != adjustment.WarehouseId)
+                if (bin.Zone == null ||
+                    bin.Zone.WarehouseId != adjustment.WarehouseId)
                 {
                     return BadRequest(new
                     {
@@ -479,7 +596,8 @@ namespace WMS.API.Controllers
 
                 var lot = await _context.InventoryLots
                     .Include(l => l.Item)
-                    .FirstOrDefaultAsync(l => l.LotId == dto.LotId);
+                    .FirstOrDefaultAsync(l =>
+                        l.LotId == dto.LotId);
 
                 if (lot == null)
                 {
@@ -511,13 +629,15 @@ namespace WMS.API.Controllers
                         b.BinId == dto.BinId &&
                         b.StockStatus == "AVAILABLE");
 
-                decimal systemQuantity = balance?.QuantityOnHand ?? 0;
+                decimal systemQuantity =
+                    balance?.QuantityOnHand ?? 0m;
 
                 line.LotId = dto.LotId;
                 line.BinId = dto.BinId;
                 line.SystemQuantity = systemQuantity;
                 line.CountedQuantity = dto.CountedQuantity;
-                line.DifferenceQuantity = dto.CountedQuantity - systemQuantity;
+                line.DifferenceQuantity =
+                    dto.CountedQuantity - systemQuantity;
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
@@ -545,7 +665,12 @@ namespace WMS.API.Controllers
             }
         }
 
+        // ============================================
         // POST: api/stock-adjustments/{id}/post
+        // Permission: inventory.adjust
+        // ============================================
+
+        [Authorize(Policy = "Permission:inventory.adjust")]
         [HttpPost("{id:long}/post")]
         public async Task<IActionResult> PostAdjustment(
             long id,
@@ -567,6 +692,11 @@ namespace WMS.API.Controllers
                 });
             }
 
+            var currentUserId = GetCurrentUserId();
+
+            if (!currentUserId.HasValue)
+                return Unauthorized();
+
             await using var transaction =
                 await _context.Database.BeginTransactionAsync();
 
@@ -575,6 +705,14 @@ namespace WMS.API.Controllers
                 var adjustment = await LockAdjustmentAsync(id);
 
                 if (adjustment == null)
+                {
+                    return NotFound(new
+                    {
+                        message = "Stock adjustment not found."
+                    });
+                }
+
+                if (!await HasWarehouseAccessAsync(adjustment.WarehouseId))
                 {
                     return NotFound(new
                     {
@@ -603,28 +741,15 @@ namespace WMS.API.Controllers
                     });
                 }
 
-                if (dto.PostedBy.HasValue)
-                {
-                    var userExists = await _context.AppUsers
-                        .AsNoTracking()
-                        .AnyAsync(u => u.UserId == dto.PostedBy.Value);
-
-                    if (!userExists)
-                    {
-                        return BadRequest(new
-                        {
-                            message = "Posting user does not exist."
-                        });
-                    }
-                }
-
-                var transactionLines = new List<InventoryTransactionLine>();
+                var transactionLines =
+                    new List<InventoryTransactionLine>();
 
                 foreach (var line in lines)
                 {
                     var lot = await _context.InventoryLots
                         .Include(l => l.Item)
-                        .FirstOrDefaultAsync(l => l.LotId == line.LotId);
+                        .FirstOrDefaultAsync(l =>
+                            l.LotId == line.LotId);
 
                     if (lot == null)
                     {
@@ -635,18 +760,36 @@ namespace WMS.API.Controllers
                         });
                     }
 
+                    var binBelongsToWarehouse =
+                        await _context.StorageBins
+                            .AnyAsync(b =>
+                                b.BinId == line.BinId &&
+                                b.IsActive &&
+                                b.Zone != null &&
+                                b.Zone.WarehouseId == adjustment.WarehouseId);
+
+                    if (!binBelongsToWarehouse)
+                    {
+                        return BadRequest(new
+                        {
+                            message = "An adjustment line bin is no longer active or does not belong to the adjustment warehouse.",
+                            adjustmentLineId = line.AdjustmentLineId
+                        });
+                    }
+
                     var balance = await _context.InventoryBalances
-                        .FromSqlInterpolated($@"
+                        .FromSqlInterpolated($"""
                             SELECT *
                             FROM inventory_balances
                             WHERE lot_id = {line.LotId}
                               AND bin_id = {line.BinId}
                               AND stock_status = 'AVAILABLE'
-                            FOR UPDATE")
+                            FOR UPDATE
+                            """)
                         .FirstOrDefaultAsync();
 
                     decimal currentSystemQuantity =
-                        balance?.QuantityOnHand ?? 0;
+                        balance?.QuantityOnHand ?? 0m;
 
                     if (currentSystemQuantity != line.SystemQuantity)
                     {
@@ -665,9 +808,7 @@ namespace WMS.API.Controllers
                     line.DifferenceQuantity = difference;
 
                     if (difference == 0)
-                    {
                         continue;
-                    }
 
                     if (difference < 0)
                     {
@@ -708,15 +849,20 @@ namespace WMS.API.Controllers
                         }
                     }
 
-                    transactionLines.Add(new InventoryTransactionLine
-                    {
-                        LotId = line.LotId,
-                        FromBinId = difference < 0 ? line.BinId : null,
-                        ToBinId = difference > 0 ? line.BinId : null,
-                        Quantity = Math.Abs(difference),
-                        UomId = lot.Item.BaseUomId,
-                        LineRemarks = "Stock adjustment"
-                    });
+                    transactionLines.Add(
+                        new InventoryTransactionLine
+                        {
+                            LotId = line.LotId,
+                            FromBinId = difference < 0
+                                ? line.BinId
+                                : null,
+                            ToBinId = difference > 0
+                                ? line.BinId
+                                : null,
+                            Quantity = Math.Abs(difference),
+                            UomId = lot.Item.BaseUomId,
+                            LineRemarks = "Stock adjustment"
+                        });
                 }
 
                 var now = DateTime.UtcNow;
@@ -729,8 +875,8 @@ namespace WMS.API.Controllers
                     ReferenceNumber = adjustment.AdjustmentNumber,
                     Remarks = adjustment.AdjustmentReason,
                     Status = "POSTED",
-                    CreatedBy = adjustment.CreatedBy,
-                    PostedBy = dto.PostedBy,
+                    CreatedBy = currentUserId.Value,
+                    PostedBy = currentUserId.Value,
                     PostedAt = now,
                     InventoryTransactionLines = transactionLines
                 };
@@ -749,10 +895,14 @@ namespace WMS.API.Controllers
                     adjustmentId = adjustment.AdjustmentId,
                     adjustmentNumber = adjustment.AdjustmentNumber,
                     adjustmentStatus = adjustment.Status,
-                    inventoryTransactionNumber = inventoryTransaction.TransactionNumber,
-                    inventoryTransactionType = inventoryTransaction.TransactionType,
-                    inventoryTransactionStatus = inventoryTransaction.Status,
+                    inventoryTransactionNumber =
+                        inventoryTransaction.TransactionNumber,
+                    inventoryTransactionType =
+                        inventoryTransaction.TransactionType,
+                    inventoryTransactionStatus =
+                        inventoryTransaction.Status,
                     postedAt = adjustment.PostedAt,
+
                     lines = lines.Select(l => new
                     {
                         l.AdjustmentLineId,
@@ -769,17 +919,6 @@ namespace WMS.API.Controllers
                 await transaction.RollbackAsync();
                 throw;
             }
-        }
-
-        private async Task<StockAdjustment?> LockAdjustmentAsync(long id)
-        {
-            return await _context.StockAdjustments
-                .FromSqlInterpolated($@"
-                    SELECT *
-                    FROM stock_adjustments
-                    WHERE adjustment_id = {id}
-                    FOR UPDATE")
-                .FirstOrDefaultAsync();
         }
     }
 }

@@ -5,8 +5,6 @@ namespace WMS.API.DTOs.StockTransfers
 {
     public class ReceiveStockTransferDto
     {
-        public long? ReceivedBy { get; set; }
-
         public List<ReceiveStockTransferLineDto> Lines { get; set; } = new();
     }
 

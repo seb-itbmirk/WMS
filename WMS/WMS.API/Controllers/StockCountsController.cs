@@ -1,6 +1,8 @@
 ﻿
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using WMS.API.Data;
 using WMS.API.DTOs.StockCounts;
 using WMS.API.Models;
@@ -18,12 +20,65 @@ namespace WMS.API.Controllers
             _context = context;
         }
 
+        // Gets the authenticated user's ID from the JWT.
+        private long? GetCurrentUserId()
+        {
+            var userId = User.FindFirstValue(
+                ClaimTypes.NameIdentifier);
+
+            return long.TryParse(userId, out var id)
+                ? id
+                : null;
+        }
+
+        // Gets all warehouses assigned to the authenticated user.
+        private async Task<List<long>> GetAccessibleWarehouseIdsAsync()
+        {
+            var userId = GetCurrentUserId();
+
+            if (!userId.HasValue)
+                return new List<long>();
+
+            return await _context.Database
+                .SqlQuery<long>($"""
+                    SELECT warehouse_id AS "Value"
+                    FROM user_warehouse_access
+                    WHERE user_id = {userId.Value}
+                    """)
+                .ToListAsync();
+        }
+
+        // Checks whether the authenticated user can access a warehouse.
+        private async Task<bool> HasWarehouseAccessAsync(long warehouseId)
+        {
+            var userId = GetCurrentUserId();
+
+            if (!userId.HasValue)
+                return false;
+
+            return await _context.Database
+                .SqlQuery<bool>($"""
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM user_warehouse_access
+                        WHERE user_id = {userId.Value}
+                          AND warehouse_id = {warehouseId}
+                    ) AS "Value"
+                    """)
+                .SingleAsync();
+        }
+
         // GET: api/stock-counts
+        [Authorize(Policy = "Permission:inventory.view")]
         [HttpGet]
         public async Task<IActionResult> GetStockCounts()
         {
+            var warehouseIds =
+                await GetAccessibleWarehouseIdsAsync();
+
             var counts = await _context.StockCounts
                 .AsNoTracking()
+                .Where(sc => warehouseIds.Contains(sc.WarehouseId))
                 .OrderByDescending(sc => sc.CountDate)
                 .ThenByDescending(sc => sc.StockCountId)
                 .Select(sc => new
@@ -42,15 +97,21 @@ namespace WMS.API.Controllers
         }
 
         // GET: api/stock-counts/{id}
+        [Authorize(Policy = "Permission:inventory.view")]
         [HttpGet("{id:long}")]
         public async Task<IActionResult> GetStockCount(long id)
         {
             if (id <= 0)
                 return BadRequest("A valid stock count ID is required.");
 
+            var warehouseIds =
+                await GetAccessibleWarehouseIdsAsync();
+
             var count = await _context.StockCounts
                 .AsNoTracking()
-                .Where(sc => sc.StockCountId == id)
+                .Where(sc =>
+                    sc.StockCountId == id &&
+                    warehouseIds.Contains(sc.WarehouseId))
                 .Select(sc => new
                 {
                     sc.StockCountId,
@@ -93,6 +154,7 @@ namespace WMS.API.Controllers
         }
 
         // POST: api/stock-counts
+        [Authorize(Policy = "Permission:inventory.count")]
         [HttpPost]
         public async Task<IActionResult> CreateStockCount(
             [FromBody] CreateStockCountDto dto)
@@ -114,6 +176,14 @@ namespace WMS.API.Controllers
             if (dto.CountDate == default)
                 return BadRequest("A valid count date is required.");
 
+            var currentUserId = GetCurrentUserId();
+
+            if (!currentUserId.HasValue)
+                return Unauthorized();
+
+            if (!await HasWarehouseAccessAsync(dto.WarehouseId))
+                return Forbid();
+
             var warehouseExists = await _context.Warehouses
                 .AsNoTracking()
                 .AnyAsync(w =>
@@ -122,16 +192,6 @@ namespace WMS.API.Controllers
 
             if (!warehouseExists)
                 return BadRequest("Active warehouse not found.");
-
-            if (dto.CreatedBy.HasValue)
-            {
-                var userExists = await _context.AppUsers
-                    .AsNoTracking()
-                    .AnyAsync(u => u.UserId == dto.CreatedBy.Value);
-
-                if (!userExists)
-                    return BadRequest("Created by user does not exist.");
-            }
 
             var numberExists = await _context.StockCounts
                 .AnyAsync(sc => sc.CountNumber == countNumber);
@@ -147,7 +207,7 @@ namespace WMS.API.Controllers
                     dto.CountDate,
                     DateTimeKind.Utc),
                 Status = "OPEN",
-                CreatedBy = dto.CreatedBy
+                CreatedBy = currentUserId.Value
             };
 
             try
@@ -175,6 +235,7 @@ namespace WMS.API.Controllers
         }
 
         // POST: api/stock-counts/{id}/lines
+        [Authorize(Policy = "Permission:inventory.count")]
         [HttpPost("{id:long}/lines")]
         public async Task<IActionResult> AddStockCountLine(
             long id,
@@ -197,6 +258,9 @@ namespace WMS.API.Controllers
                 var count = await LockStockCountAsync(id);
 
                 if (count == null)
+                    return NotFound("Stock count not found.");
+
+                if (!await HasWarehouseAccessAsync(count.WarehouseId))
                     return NotFound("Stock count not found.");
 
                 if (count.Status != "OPEN" &&
@@ -294,6 +358,7 @@ namespace WMS.API.Controllers
         }
 
         // PUT: api/stock-counts/{id}/lines/{lineId}
+        [Authorize(Policy = "Permission:inventory.count")]
         [HttpPut("{id:long}/lines/{lineId:long}")]
         public async Task<IActionResult> RecordStockCount(
             long id,
@@ -309,6 +374,11 @@ namespace WMS.API.Controllers
             if (dto.CountedQuantity < 0)
                 return BadRequest("Counted quantity cannot be negative.");
 
+            var currentUserId = GetCurrentUserId();
+
+            if (!currentUserId.HasValue)
+                return Unauthorized();
+
             await using var transaction =
                 await _context.Database.BeginTransactionAsync();
 
@@ -317,6 +387,9 @@ namespace WMS.API.Controllers
                 var count = await LockStockCountAsync(id);
 
                 if (count == null)
+                    return NotFound("Stock count not found.");
+
+                if (!await HasWarehouseAccessAsync(count.WarehouseId))
                     return NotFound("Stock count not found.");
 
                 if (count.Status != "OPEN" &&
@@ -334,18 +407,8 @@ namespace WMS.API.Controllers
                 if (line == null)
                     return NotFound("Stock count line not found.");
 
-                if (dto.CountedBy.HasValue)
-                {
-                    var userExists = await _context.AppUsers
-                        .AsNoTracking()
-                        .AnyAsync(u => u.UserId == dto.CountedBy.Value);
-
-                    if (!userExists)
-                        return BadRequest("Counted by user does not exist.");
-                }
-
                 line.CountedQuantity = dto.CountedQuantity;
-                line.CountedBy = dto.CountedBy;
+                line.CountedBy = currentUserId.Value;
                 line.CountedAt = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
@@ -380,6 +443,7 @@ namespace WMS.API.Controllers
         }
 
         // POST: api/stock-counts/{id}/complete
+        [Authorize(Policy = "Permission:inventory.count")]
         [HttpPost("{id:long}/complete")]
         public async Task<IActionResult> CompleteStockCount(long id)
         {
@@ -394,6 +458,9 @@ namespace WMS.API.Controllers
                 var count = await LockStockCountAsync(id);
 
                 if (count == null)
+                    return NotFound("Stock count not found.");
+
+                if (!await HasWarehouseAccessAsync(count.WarehouseId))
                     return NotFound("Stock count not found.");
 
                 if (count.Status != "IN_PROGRESS")
@@ -455,6 +522,7 @@ namespace WMS.API.Controllers
         }
 
         // POST: api/stock-counts/{id}/post
+        [Authorize(Policy = "Permission:inventory.adjust")]
         [HttpPost("{id:long}/post")]
         public async Task<IActionResult> PostStockCount(
             long id,
@@ -466,6 +534,11 @@ namespace WMS.API.Controllers
             if (dto == null)
                 return BadRequest("Posting details are required.");
 
+            var currentUserId = GetCurrentUserId();
+
+            if (!currentUserId.HasValue)
+                return Unauthorized();
+
             await using var dbTransaction =
                 await _context.Database.BeginTransactionAsync();
 
@@ -474,6 +547,9 @@ namespace WMS.API.Controllers
                 var count = await LockStockCountAsync(id);
 
                 if (count == null)
+                    return NotFound("Stock count not found.");
+
+                if (!await HasWarehouseAccessAsync(count.WarehouseId))
                     return NotFound("Stock count not found.");
 
                 if (count.Status != "COMPLETED")
@@ -496,16 +572,6 @@ namespace WMS.API.Controllers
                 {
                     return BadRequest(
                         "All stock count lines must have a physical count.");
-                }
-
-                if (dto.PostedBy.HasValue)
-                {
-                    var userExists = await _context.AppUsers
-                        .AsNoTracking()
-                        .AnyAsync(u => u.UserId == dto.PostedBy.Value);
-
-                    if (!userExists)
-                        return BadRequest("Posted by user does not exist.");
                 }
 
                 var inventoryTransactionLines =
@@ -614,7 +680,7 @@ namespace WMS.API.Controllers
                     Remarks = $"Posted stock count: {count.CountNumber}",
                     Status = "POSTED",
                     CreatedBy = count.CreatedBy,
-                    PostedBy = dto.PostedBy,
+                    PostedBy = currentUserId.Value,
                     PostedAt = now,
                     InventoryTransactionLines =
                         inventoryTransactionLines
@@ -653,6 +719,7 @@ namespace WMS.API.Controllers
             }
         }
 
+        // Locks a stock count row to prevent concurrent modifications.
         private async Task<StockCount?> LockStockCountAsync(long id)
         {
             return await _context.StockCounts

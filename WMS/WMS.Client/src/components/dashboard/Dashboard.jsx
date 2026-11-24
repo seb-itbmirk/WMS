@@ -1,4 +1,3 @@
-
 function Dashboard({
     warehouses,
     activeWarehouses,
@@ -215,19 +214,32 @@ function Dashboard({
                     ) : (
                         <div className="warehouse-list">
                             {warehouses.slice(0, 5).map(warehouse => (
-                                <div
-                                    className="warehouse-row"
-                                    key={warehouse.warehouseId}
-                                >
-                                    <div className="warehouse-symbol">W</div>
+                                <div className="warehouse-row" key={warehouse.warehouseId}>
+                                    <button
+                                        type="button"
+                                        className="warehouse-symbol warehouse-clickable"
+                                        disabled={!warehouse.isActive}
+                                        onClick={() => onWarehouseSelect?.(warehouse)}
+                                        title="Open warehouse dashboard"
+                                    >
+                                        W
+                                    </button>
 
                                     <div className="warehouse-details">
-                                        <strong>{warehouse.warehouseName}</strong>
+                                        <strong>
+                                            <button
+                                                type="button"
+                                                className="warehouse-name-button"
+                                                disabled={!warehouse.isActive}
+                                                onClick={() => onWarehouseSelect?.(warehouse)}
+                                            >
+                                                {warehouse.warehouseName}
+                                            </button>
+                                        </strong>
                                         <span>
                                             {warehouse.warehouseCode} · {warehouse.city || 'Location not specified'}
                                         </span>
                                     </div>
-
                                     <span
                                         className={
                                             warehouse.isActive
