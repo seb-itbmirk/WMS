@@ -21,7 +21,6 @@ public class WarehousesController : ControllerBase
         _context = context;
     }
 
-    // Get authenticated user's ID from JWT
     private bool TryGetCurrentUserId(out long userId)
     {
         var userIdClaim = User.FindFirstValue(
@@ -30,13 +29,24 @@ public class WarehousesController : ControllerBase
         return long.TryParse(userIdClaim, out userId);
     }
 
-    // Check whether the logged-in user has access to a warehouse
-    private Task<bool> HasWarehouseAccessAsync(
+    private async Task<bool> IsSuperAdminAsync(long userId)
+    {
+        return await _context.AppUsers
+            .Where(u => u.UserId == userId && u.IsActive)
+            .AnyAsync(u => u.Roles.Any(r =>
+                r.RoleName == "Super Admin"));
+    }
+
+    private async Task<bool> HasWarehouseAccessAsync(
         long userId,
         long warehouseId)
     {
-        return _context.AppUsers.AnyAsync(u =>
+        if (await IsSuperAdminAsync(userId))
+            return true;
+
+        return await _context.AppUsers.AnyAsync(u =>
             u.UserId == userId &&
+            u.IsActive &&
             u.Warehouses.Any(w =>
                 w.WarehouseId == warehouseId));
     }
@@ -49,10 +59,23 @@ public class WarehousesController : ControllerBase
         if (!TryGetCurrentUserId(out var userId))
             return Unauthorized();
 
-        var warehouses = await _context.AppUsers
+        IQueryable<Warehouse> query;
+
+        if (await IsSuperAdminAsync(userId))
+        {
+            // Super Admin can see every warehouse.
+            query = _context.Warehouses;
+        }
+        else
+        {
+            // Other users only see assigned warehouses.
+            query = _context.AppUsers
+                .Where(u => u.UserId == userId)
+                .SelectMany(u => u.Warehouses);
+        }
+
+        var warehouses = await query
             .AsNoTracking()
-            .Where(u => u.UserId == userId)
-            .SelectMany(u => u.Warehouses)
             .OrderBy(w => w.WarehouseCode)
             .ToListAsync();
 
@@ -67,10 +90,16 @@ public class WarehousesController : ControllerBase
         if (!TryGetCurrentUserId(out var userId))
             return Unauthorized();
 
-        var warehouse = await _context.AppUsers
+        if (!await HasWarehouseAccessAsync(userId, id))
+        {
+            return NotFound(new
+            {
+                message = "Warehouse not found."
+            });
+        }
+
+        var warehouse = await _context.Warehouses
             .AsNoTracking()
-            .Where(u => u.UserId == userId)
-            .SelectMany(u => u.Warehouses)
             .FirstOrDefaultAsync(w => w.WarehouseId == id);
 
         if (warehouse == null)
@@ -191,6 +220,17 @@ public class WarehousesController : ControllerBase
             });
         }
 
+        var warehouse = await _context.Warehouses
+            .FirstOrDefaultAsync(w => w.WarehouseId == id);
+
+        if (warehouse == null)
+        {
+            return NotFound(new
+            {
+                message = "Warehouse not found."
+            });
+        }
+
         var warehouseName = dto.WarehouseName?.Trim();
 
         if (string.IsNullOrWhiteSpace(warehouseName))
@@ -217,17 +257,6 @@ public class WarehousesController : ControllerBase
             });
         }
 
-        var warehouse = await _context.Warehouses
-            .FirstOrDefaultAsync(w => w.WarehouseId == id);
-
-        if (warehouse == null)
-        {
-            return NotFound(new
-            {
-                message = "Warehouse not found."
-            });
-        }
-
         warehouse.WarehouseName = warehouseName;
         warehouse.City = dto.City?.Trim();
         warehouse.Address = dto.Address?.Trim();
@@ -235,6 +264,45 @@ public class WarehousesController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(warehouse);
+    }
+
+    // GET: api/warehouses/assignable
+    [HttpGet("assignable")]
+    [Authorize(Policy = "Permission:users.invite")]
+    public async Task<IActionResult> GetAssignableWarehouses()
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return Unauthorized();
+
+        IQueryable<Warehouse> query;
+
+        if (await IsSuperAdminAsync(userId))
+        {
+            query = _context.Warehouses;
+        }
+        else
+        {
+            query = _context.AppUsers
+                .Where(u => u.UserId == userId)
+                .SelectMany(u => u.Warehouses);
+        }
+
+        var warehouses = await query
+            .AsNoTracking()
+            .Where(w => w.IsActive)
+            .OrderBy(w => w.WarehouseName)
+            .Select(w => new
+            {
+                w.WarehouseId,
+                w.WarehouseCode,
+                w.WarehouseName,
+                w.City,
+                w.IsActive
+            })
+            .ToListAsync();
+
+        // Return an array, not the temporary diagnostic object.
+        return Ok(warehouses);
     }
 
     // PATCH: api/warehouses/1/deactivate

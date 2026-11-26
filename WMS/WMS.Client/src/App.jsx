@@ -27,8 +27,9 @@ import ReplenishmentPage from './pages/Replenishment/Replenishment'
 import SuppliersPage from './pages/Suppliers/Suppliers'
 import UnitsOfMeasurePage from './pages/UnitsOfMeasure/UnitsOfMeasure'
 import QualityParametersPage from './pages/QualityParameters/QualityParameters'
+import UsersPage from './pages/Users/UsersPage'
 
-function App() {
+function App({ currentUser, onLogout }) {
     const [page, setPage] = useState('Dashboard')
 
     // WMS data and API operations
@@ -53,6 +54,8 @@ function App() {
         loadProductionOrders
     } = useWmsData()
 
+    
+
     // Management modal states
     const [showForm, setShowForm] = useState(false)
     const [formType, setFormType] = useState('')
@@ -64,7 +67,6 @@ function App() {
     // Load initial application data
     useEffect(() => {
         loadData()
-        loadProductionDashboard()
     }, [])
 
     // Load production orders when opening the module
@@ -74,22 +76,7 @@ function App() {
         }
     }, [page])
 
-    // Load production dashboard summary
-    const loadProductionDashboard = async () => {
-        try {
-            setProductionLoading(true)
-            setProductionError(false)
 
-            const response = await api.get('/production-orders/dashboard')
-
-            setProductionDashboard(response.data)
-        } catch (error) {
-            console.error('Unable to load production dashboard:', error)
-            setProductionError(true)
-        } finally {
-            setProductionLoading(false)
-        }
-    }
 
     // Open the form for adding or editing
     const openForm = (type, record = null) => {
@@ -216,6 +203,8 @@ function App() {
                 setPage={handlePageChange}
                 apiError={apiError}
                 loading={loading}
+                currentUser={currentUser}
+                onLogout={onLogout}
             >
                 {/* DASHBOARD */}
                 {page === 'Dashboard' && (
@@ -297,6 +286,9 @@ function App() {
                 {/* REPORTS */}
                 {page === 'Reports & Analytics' && <ReportsPage />}
 
+                {/* ADMINISTRATION */}
+                {page === 'User Management' && <UsersPage />}
+
                 {/* MODULE NOT YET AVAILABLE */}
                 {![
                     'Dashboard',
@@ -319,7 +311,8 @@ function App() {
                     'Replenishment',
                     'Supplier Management',
                     'Units of Measure',
-                    'Quality Parameters'
+                    'Quality Parameters',
+                    'User Management'
                 ].includes(page) && (
                     <section className="intro">
                         <div>

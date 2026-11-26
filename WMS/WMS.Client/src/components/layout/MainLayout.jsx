@@ -7,12 +7,12 @@ function MainLayout({
     setPage,
     apiError,
     loading,
+    currentUser,
+    onLogout,
     children
 }) {
     return (
         <div className="layout">
-
-            {/* Hover-triggered Sidebar */}
             <div className="sidebar-hover-zone">
                 <Sidebar
                     page={page}
@@ -22,9 +22,12 @@ function MainLayout({
                 />
             </div>
 
-            {/* Main Content */}
             <main className="main-area">
-                <TopHeader page={page} />
+                <TopHeader
+                    page={page}
+                    currentUser={currentUser}
+                    onLogout={onLogout}
+                />
 
                 <div className="page-content">
                     {apiError && (
@@ -37,7 +40,6 @@ function MainLayout({
                     {children}
                 </div>
             </main>
-
         </div>
     )
 }

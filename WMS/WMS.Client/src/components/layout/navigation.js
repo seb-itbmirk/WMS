@@ -50,7 +50,14 @@ const navigation = [
             { name: 'Units of Measure', icon: '⚖' },
             { name: 'Quality Parameters', icon: '✓' }
         ]
+    },
+    {
+        heading: 'ADMINISTRATION',
+        links: [
+            { name: 'User Management', icon: '♙' }
+        ]
     }
+    
 ]
 
 export default navigation

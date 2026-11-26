@@ -18,7 +18,7 @@ function InventoryPage() {
 
     const loadWarehouses = async () => {
         try {
-            const response = await api.get('/warehouses')
+            const response = await api.get('/warehouses/assignable')
             setWarehouses(response.data)
         } catch (error) {
             console.error('Unable to load warehouses:', error)

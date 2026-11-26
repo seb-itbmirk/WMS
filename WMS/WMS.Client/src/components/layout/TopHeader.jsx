@@ -1,5 +1,13 @@
 
-function TopHeader({ page }) {
+function TopHeader({ page, currentUser, onLogout }) {
+    const fullName = currentUser?.fullName || currentUser?.username || 'User'
+
+    const roles = currentUser?.roles || []
+
+    const roleLabel = roles.length
+        ? roles.join(', ')
+        : 'WMS User'
+
     return (
         <header className="top-header">
             <div className="breadcrumb">
@@ -7,12 +15,23 @@ function TopHeader({ page }) {
             </div>
 
             <div className="profile">
-                <div className="profile-avatar">A</div>
-
-                <div>
-                    <strong>Administrator</strong>
-                    <span>System administrator</span>
+                <div className="profile-avatar">
+                    {fullName.charAt(0).toUpperCase()}
                 </div>
+
+                <div className="profile-details">
+                    <strong>{fullName}</strong>
+                    <span>{roleLabel}</span>
+                </div>
+
+                <button
+                    type="button"
+                    className="logout-button"
+                    onClick={onLogout}
+                    title="Sign out"
+                >
+                    Sign out
+                </button>
             </div>
         </header>
     )
