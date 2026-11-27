@@ -1,0 +1,584 @@
+
+/* ========================================
+   PUTAWAY TASKS PAGE
+======================================== */
+
+.putaway-page {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 28px;
+    padding-bottom: 30px;
+    color: #26352f;
+}
+
+/* ========================================
+   PAGE HEADER
+======================================== */
+
+.putaway-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+}
+
+.putaway-heading h1 {
+    margin: 5px 0 6px;
+    color: #26352f;
+    font-size: 27px;
+    font-weight: 700;
+}
+
+.putaway-heading p {
+    margin: 0;
+    color: #78847d;
+    font-size: 13px;
+}
+
+.putaway-eyebrow {
+    color: #789083;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+}
+
+/* ========================================
+   BUTTONS
+======================================== */
+
+.putaway-primary-btn,
+.putaway-secondary-btn,
+.putaway-action-btn {
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 9px 13px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.putaway-primary-btn {
+    background: #365c43;
+    color: #fff;
+}
+
+.putaway-primary-btn:hover {
+    background: #294b36;
+}
+
+.putaway-secondary-btn {
+    background: #f5f8f5;
+    color: #365c43;
+    border-color: #dce5dd;
+}
+
+.putaway-secondary-btn:hover {
+    background: #eaf0eb;
+}
+
+.putaway-action-btn {
+    padding: 7px 10px;
+    background: #f5f8f5;
+    color: #365c43;
+    border-color: #dce5dd;
+    font-size: 11px;
+}
+
+.putaway-action-btn:hover {
+    background: #eaf0eb;
+}
+
+.putaway-primary-btn:disabled,
+.putaway-secondary-btn:disabled,
+.putaway-action-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* ========================================
+   ALERTS
+======================================== */
+
+.putaway-alert {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 15px;
+    border-radius: 7px;
+    font-size: 12px;
+}
+
+.putaway-alert button {
+    border: none;
+    background: transparent;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.putaway-alert-error {
+    background: #fbebeb;
+    color: #984747;
+    border: 1px solid #f1dada;
+}
+
+.putaway-alert-success {
+    background: #eaf4eb;
+    color: #39734a;
+    border: 1px solid #d5e9d8;
+}
+
+/* ========================================
+   SUMMARY CARDS
+======================================== */
+
+.putaway-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.putaway-summary-card {
+    padding: 18px;
+    background: #fff;
+    border: 1px solid #e5eae6;
+    border-radius: 10px;
+}
+
+.putaway-summary-card span {
+    display: block;
+    margin-bottom: 9px;
+    color: #78847d;
+    font-size: 11px;
+}
+
+.putaway-summary-card strong {
+    display: block;
+    color: #26352f;
+    font-size: 25px;
+    font-weight: 700;
+}
+
+/* ========================================
+   TABLE PANEL
+======================================== */
+
+.putaway-panel {
+    min-width: 0;
+    padding: 20px;
+    background: #fff;
+    border: 1px solid #e5eae6;
+    border-radius: 10px;
+}
+
+/* ========================================
+   TABLE HEADER
+======================================== */
+
+.putaway-table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    padding-bottom: 18px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid #edf0ed;
+}
+
+.putaway-table-title {
+    flex-shrink: 0;
+}
+
+.putaway-table-header h2 {
+    margin: 0;
+    color: #304238;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.putaway-table-header p {
+    margin: 6px 0 0;
+    color: #78847d;
+    font-size: 13px;
+}
+
+/* ========================================
+   SEARCH AND FILTER TOOLBAR
+======================================== */
+
+.putaway-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 9px;
+    margin: 0;
+}
+
+.putaway-toolbar input {
+    width: 220px;
+    min-width: 150px;
+}
+
+.putaway-toolbar select {
+    width: 140px;
+}
+
+.putaway-toolbar input,
+.putaway-toolbar select {
+    min-height: 40px;
+    padding: 9px 11px;
+    color: #35483d;
+    background: #fff;
+    border: 1px solid #dce3de;
+    border-radius: 6px;
+    outline: none;
+    font-family: inherit;
+    font-size: 12px;
+    box-sizing: border-box;
+}
+
+.putaway-toolbar input:focus,
+.putaway-toolbar select:focus {
+    border-color: #648b72;
+    box-shadow: 0 0 0 2px rgba(100, 139, 114, 0.1);
+}
+
+/* ========================================
+   TABLE
+======================================== */
+
+.putaway-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.putaway-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.putaway-table th {
+    padding: 12px;
+    color: #78847d;
+    background: #f6f8f6;
+    border-bottom: 1px solid #e6ebe6;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+}
+
+.putaway-table td {
+    padding: 13px 12px;
+    color: #536159;
+    border-bottom: 1px solid #edf0ed;
+    vertical-align: middle;
+    font-size: 12px;
+}
+
+.putaway-table tbody tr:hover {
+    background: #fafcf9;
+}
+
+.putaway-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.putaway-table td strong {
+    display: block;
+    color: #304238;
+    font-weight: 700;
+}
+
+.putaway-table td small {
+    display: block;
+    margin-top: 3px;
+    color: #849188;
+    font-size: 11px;
+}
+
+.putaway-empty {
+    padding: 30px 15px !important;
+    color: #89948d !important;
+    text-align: center;
+}
+
+/* ========================================
+   STATUS BADGES
+======================================== */
+
+.putaway-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 9px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: capitalize;
+}
+
+.putaway-status.pending {
+    color: #8b6b24;
+    background: #fff5d9;
+}
+
+.putaway-status.completed {
+    color: #347047;
+    background: #e7f3e9;
+}
+
+.putaway-muted {
+    color: #849188;
+    font-size: 11px;
+}
+
+/* ========================================
+   MODAL
+======================================== */
+
+.putaway-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    background: rgba(24, 38, 30, 0.48);
+}
+
+.putaway-modal {
+    width: 100%;
+    max-width: 650px;
+    max-height: 90vh;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #e5eae6;
+    border-radius: 10px;
+    box-shadow: 0 18px 55px rgba(0, 0, 0, 0.18);
+}
+
+.putaway-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #edf0ed;
+}
+
+.putaway-modal-header h2 {
+    margin: 5px 0 0;
+    color: #26352f;
+    font-size: 19px;
+    font-weight: 700;
+}
+
+.putaway-close {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    color: #6d7b72;
+    background: #f0f3f0;
+    border: none;
+    border-radius: 50%;
+    font-size: 22px;
+    cursor: pointer;
+}
+
+.putaway-close:hover {
+    color: #294b3c;
+    background: #e3eae4;
+}
+
+/* ========================================
+   FORM SECTIONS
+======================================== */
+
+.putaway-form-section {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding: 20px 24px;
+    border-bottom: 1px solid #edf0ed;
+}
+
+.putaway-form-section h3 {
+    margin: 0 0 8px;
+    color: #304238;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.putaway-form-section label {
+    margin-top: 5px;
+    color: #536159;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.putaway-form-section input,
+.putaway-form-section select {
+    width: 100%;
+    min-height: 40px;
+    padding: 9px 11px;
+    color: #35483d;
+    background: #fff;
+    border: 1px solid #dce3de;
+    border-radius: 6px;
+    outline: none;
+    font-family: inherit;
+    font-size: 12px;
+    box-sizing: border-box;
+}
+
+.putaway-form-section input:focus,
+.putaway-form-section select:focus {
+    border-color: #648b72;
+    box-shadow: 0 0 0 2px rgba(100, 139, 114, 0.1);
+}
+
+.putaway-form-section select:disabled {
+    color: #929d95;
+    background: #f5f7f5;
+    cursor: not-allowed;
+}
+
+/* ========================================
+   RECEIPT INFORMATION
+======================================== */
+
+.putaway-receipt-info {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding: 14px;
+    margin: 5px 0 8px;
+    background: #f7f9f6;
+    border: 1px solid #e5eae6;
+    border-radius: 7px;
+}
+
+.putaway-receipt-info span,
+.putaway-receipt-info strong {
+    display: block;
+}
+
+.putaway-receipt-info span {
+    margin-bottom: 5px;
+    color: #849188;
+    font-size: 11px;
+}
+
+.putaway-receipt-info strong {
+    color: #35483d;
+    font-size: 12px;
+}
+
+.putaway-help {
+    margin: 0;
+    color: #849188;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+/* ========================================
+   MODAL ACTIONS
+======================================== */
+
+.putaway-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 24px;
+    background: #f9fbf8;
+    border-top: 1px solid #edf0ed;
+}
+
+/* ========================================
+   RESPONSIVE
+======================================== */
+
+@media (max-width: 900px) {
+    .putaway-table-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .putaway-toolbar {
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .putaway-toolbar input {
+        flex: 1;
+        min-width: 180px;
+    }
+}
+
+@media (max-width: 650px) {
+    .putaway-page {
+        padding: 18px;
+    }
+
+    .putaway-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .putaway-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .putaway-panel {
+        padding: 14px;
+    }
+
+    .putaway-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .putaway-toolbar input,
+    .putaway-toolbar select {
+        width: 100%;
+    }
+
+    .putaway-receipt-info {
+        grid-template-columns: 1fr;
+    }
+
+    .putaway-modal-backdrop {
+        padding: 10px;
+    }
+
+    .putaway-modal-header,
+    .putaway-form-section {
+        padding-left: 17px;
+        padding-right: 17px;
+    }
+
+    .putaway-modal-actions {
+        padding: 14px 17px;
+    }
+}
+
+@media (max-width: 420px) {
+    .putaway-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .putaway-modal-actions {
+        flex-direction: column-reverse;
+    }
+
+    .putaway-modal-actions button {
+        width: 100%;
+    }
+}

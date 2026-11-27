@@ -1,8 +1,10 @@
 
 /* =========================================
    STOCK TRANSFERS
-   WMS STANDARD TABLE DESIGN
+   WMS INVENTORY OVERVIEW DESIGN STANDARD
 ========================================= */
+
+/* PAGE LAYOUT */
 
 .st-page {
     display: flex;
@@ -17,13 +19,14 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 20px;
+    gap: 15px;
 }
 
 .st-heading h1 {
     margin: 4px 0;
     color: #26352f;
     font-size: 27px;
+    font-weight: 700;
 }
 
 .st-heading p {
@@ -32,11 +35,49 @@
     font-size: 13px;
 }
 
+.st-heading .eyebrow {
+    color: #849087;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
 .st-heading-actions,
 .st-actions {
     display: flex;
     align-items: center;
     gap: 9px;
+}
+
+/* REFRESH AND VIEW BUTTONS */
+
+.st-heading-actions .secondary-button,
+.st-view-button {
+    min-height: 36px;
+    padding: 8px 12px;
+    border: 1px solid #dce5dd;
+    border-radius: 6px;
+    background: #f5f8f5;
+    color: #365c43;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.st-heading-actions .secondary-button:hover,
+.st-view-button:hover {
+    background: #eaf1eb;
+}
+
+.st-heading-actions button:disabled,
+.st-actions button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.st-actions button {
+    cursor: pointer;
 }
 
 /* SUMMARY CARDS */
@@ -58,8 +99,6 @@
 }
 
 .st-summary span {
-    display: block;
-    margin: 0;
     color: #849087;
     font-size: 10px;
     font-weight: 700;
@@ -69,6 +108,8 @@
 .st-summary strong {
     color: #26352f;
     font-size: 25px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
 }
 
 /* TABLE PANEL */
@@ -89,20 +130,29 @@
     margin-bottom: 20px;
 }
 
+.st-table-heading .eyebrow {
+    color: #849087;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
 .st-table-heading h2 {
-    margin: 0;
-    color: #26352f;
+    margin: 4px 0 0;
+    color: #304238;
     font-size: 17px;
+    font-weight: 700;
 }
 
 .st-record-count {
     color: #849087;
     font-size: 12px;
+    white-space: nowrap;
 }
 
 /* TABLE */
 
-.st-table-wrapper {
+.table-scroll {
     width: 100%;
     overflow-x: auto;
 }
@@ -132,8 +182,13 @@
     vertical-align: middle;
 }
 
+.st-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
 .st-table td strong {
     color: #304238;
+    font-weight: 600;
 }
 
 /* STATUS BADGES */
@@ -149,44 +204,23 @@
 }
 
 .st-draft {
-    color: #8b6b24;
-    background: #fff5d9;
+    color: #986a1d;
+    background: #fff2d9;
 }
 
 .st-dispatched {
-    color: #28669a;
-    background: #e5f2fc;
+    color: #496c9c;
+    background: #eaf0fa;
 }
 
 .st-partial {
-    color: #8a5a1d;
-    background: #fff0df;
+    color: #986a1d;
+    background: #fff2d9;
 }
 
 .st-received {
-    color: #27764e;
-    background: #e4f5eb;
-}
-
-/* ACTION BUTTONS */
-
-.st-view-button {
-    padding: 6px 10px;
-    border: 1px solid #dce5dd;
-    border-radius: 5px;
-    background: #f5f8f5;
-    color: #365c43;
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.st-view-button:hover {
-    background: #eaf1eb;
-}
-
-.st-actions button {
-    cursor: pointer;
+    color: #347047;
+    background: #e7f3e9;
 }
 
 /* ALERTS */
@@ -219,12 +253,36 @@
     cursor: pointer;
 }
 
-/* MODAL */
+/* EMPTY STATES */
+
+.st-page .empty-content {
+    padding: 30px;
+    color: #849087;
+    font-size: 12px;
+    text-align: center;
+}
+
+.st-page .empty-content strong {
+    display: block;
+    margin-bottom: 6px;
+    color: #536159;
+    font-size: 13px;
+}
+
+.st-page .empty-content p {
+    margin: 0;
+    color: #89948d;
+    font-size: 12px;
+}
+
+/* MODALS */
 
 .st-modal {
+    box-sizing: border-box;
     width: min(720px, 95vw);
     max-height: 90vh;
     overflow-y: auto;
+    border-radius: 10px;
 }
 
 .st-modal label {
@@ -246,9 +304,10 @@
     border-radius: 6px;
     background: #fff;
     color: #34443b;
-    font: inherit;
+    font-family: inherit;
     font-size: 12px;
     outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .st-modal input:focus,
@@ -287,6 +346,7 @@
     margin: 0 0 12px;
     color: #34483b;
     font-size: 14px;
+    font-weight: 700;
 }
 
 /* ITEM INFORMATION */
@@ -297,19 +357,21 @@
     gap: 12px;
     margin-top: 10px;
     padding: 11px 12px;
+    border: 1px solid #e5eae6;
     border-radius: 7px;
-    background: #f2f6f2;
+    background: #f6f8f6;
     color: #506357;
     font-size: 11px;
 }
 
 .st-item-info strong {
+    color: #365c43;
     white-space: nowrap;
 }
 
 .st-availability {
     margin: 9px 0;
-    color: #34744f;
+    color: #347047;
     font-size: 12px;
     font-weight: 700;
 }
@@ -326,8 +388,9 @@
 
 .st-empty-lines {
     padding: 15px;
+    border: 1px solid #edf0ed;
     border-radius: 7px;
-    background: #f7f9f7;
+    background: #f6f8f6;
     color: #89948d;
     font-size: 12px;
 }
@@ -359,8 +422,10 @@
 }
 
 .st-line-row button {
-    border: none;
-    background: transparent;
+    padding: 5px 8px;
+    border: 1px solid #f0dddd;
+    border-radius: 5px;
+    background: #fbf1f1;
     color: #a14e4e;
     font-size: 11px;
     cursor: pointer;
@@ -380,20 +445,23 @@
     flex-direction: column;
     gap: 7px;
     padding: 12px;
+    border: 1px solid #e5eae6;
     border-radius: 7px;
-    background: #f3f6f3;
+    background: #f6f8f6;
 }
 
 .st-receive-info span,
 .st-detail-grid span {
     color: #849087;
     font-size: 10px;
+    font-weight: 600;
 }
 
 .st-receive-info strong,
 .st-detail-grid strong {
     color: #34483b;
     font-size: 14px;
+    font-variant-numeric: tabular-nums;
 }
 
 /* TRANSFER DETAILS */
@@ -410,8 +478,24 @@
     flex-direction: column;
     gap: 7px;
     padding: 13px;
+    border: 1px solid #e5eae6;
     border-radius: 7px;
-    background: #f5f7f5;
+    background: #f6f8f6;
+}
+
+/* MODAL ACTIONS */
+
+.st-modal .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 9px;
+    margin-top: 22px;
+    padding-top: 15px;
+    border-top: 1px solid #edf0ed;
+}
+
+.st-modal .modal-actions button {
+    min-height: 36px;
 }
 
 /* RESPONSIVE DESIGN */
@@ -428,17 +512,17 @@
 }
 
 @media (max-width: 600px) {
-    .st-form-grid,
-    .st-detail-grid {
-        grid-template-columns: 1fr;
-    }
-
     .st-heading-actions {
         width: 100%;
     }
 
     .st-heading-actions button {
         flex: 1;
+    }
+
+    .st-form-grid,
+    .st-detail-grid {
+        grid-template-columns: 1fr;
     }
 
     .st-line-row {
@@ -456,5 +540,22 @@
 
     .st-table-panel {
         padding: 14px;
+    }
+
+    .st-table-heading {
+        align-items: flex-start;
+    }
+
+    .st-summary > div {
+        padding: 14px;
+    }
+
+    .st-modal {
+        width: 95vw;
+        padding: 16px;
+    }
+
+    .st-item-info {
+        flex-direction: column;
     }
 }

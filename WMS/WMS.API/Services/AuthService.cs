@@ -47,14 +47,31 @@ public class AuthService
         if (!isPasswordValid)
             return null;
 
+        // Get the user's assigned roles.
         var roles = user.Roles
             .Select(r => r.RoleName)
             .ToList();
 
+        // Get the user's assigned warehouses.
         var warehouseIds = user.Warehouses
             .Select(w => w.WarehouseId)
             .ToList();
 
+        // Get all permissions granted through the user's roles.
+        var permissions = await _context.Database
+            .SqlQuery<string>($"""
+                SELECT DISTINCT p.permission_code AS "Value"
+                FROM user_roles ur
+                INNER JOIN role_permissions rp
+                    ON rp.role_id = ur.role_id
+                INNER JOIN permissions p
+                    ON p.permission_id = rp.permission_id
+                WHERE ur.user_id = {user.UserId}
+                ORDER BY "Value"
+                """)
+            .ToListAsync();
+
+        // Generate authentication token.
         var accessToken = GenerateJwtToken(user, roles);
 
         return new LoginResponseDto
@@ -66,7 +83,8 @@ public class AuthService
             Username = user.Username,
             FullName = user.FullName,
             Roles = roles,
-            WarehouseIds = warehouseIds
+            WarehouseIds = warehouseIds,
+            Permissions = permissions
         };
     }
 

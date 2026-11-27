@@ -19,6 +19,7 @@ function MainLayout({
                     setPage={setPage}
                     apiError={apiError}
                     loading={loading}
+                    currentUser={currentUser}
                 />
             </div>
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../services/api'
+import './inventoryoverview.css'
 
 export default function InventoryOverviewPage() {
     const [balances, setBalances] = useState([])

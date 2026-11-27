@@ -7,6 +7,8 @@ import ManagementModal from './components/modals/ManagementModal'
 
 import Dashboard from './components/dashboard/Dashboard'
 import MainLayout from './components/layout/MainLayout'
+import navigation from './components/layout/navigation'
+import { canAccessPage } from './utils/accessControl'
 
 import ManagementPage from './pages/Warehouses/ManagementPage'
 import ProductionOrdersPage from './pages/ProductionOrders/ProductionOrders'
@@ -28,35 +30,52 @@ import SuppliersPage from './pages/Suppliers/Suppliers'
 import UnitsOfMeasurePage from './pages/UnitsOfMeasure/UnitsOfMeasure'
 import QualityParametersPage from './pages/QualityParameters/QualityParameters'
 import UsersPage from './pages/Users/UsersPage'
+import UsersListPage from './pages/Users/UsersListPage'
+
+const availablePages = [
+    'Dashboard',
+    'Warehouses',
+    'Item Categories',
+    'Production Orders',
+    'Stock Overview',
+    'Stock Transfers',
+    'Storage Locations',
+    'Items & Materials',
+    'Bill of Materials',
+    'Purchase Orders',
+    'Quality Inspections',
+    'Stock Adjustments',
+    'Goods Receipts',
+    'Putaway Tasks',
+    'Stock Counts',
+    'Customers',
+    'Reports & Analytics',
+    'Replenishment',
+    'Supplier Management',
+    'Units of Measure',
+    'Quality Parameters',
+    'User Management',
+    'User List'
+]
 
 function App({ currentUser, onLogout }) {
     const [page, setPage] = useState('Dashboard')
 
-    // WMS data and API operations
     const {
         warehouses,
-        setWarehouses,
         categories,
-        setCategories,
-
         loading,
         apiError,
-        setApiError,
         loadData,
-
         productionDashboard,
         productionLoading,
         productionError,
-
         productionOrders,
         productionOrdersLoading: ordersLoading,
         productionOrdersError: ordersError,
         loadProductionOrders
     } = useWmsData()
 
-    
-
-    // Management modal states
     const [showForm, setShowForm] = useState(false)
     const [formType, setFormType] = useState('')
     const [editingId, setEditingId] = useState(null)
@@ -64,21 +83,16 @@ function App({ currentUser, onLogout }) {
     const [saving, setSaving] = useState(false)
     const [message, setMessage] = useState('')
 
-    // Load initial application data
     useEffect(() => {
         loadData()
-    }, [])
+    }, [loadData])
 
-    // Load production orders when opening the module
     useEffect(() => {
         if (page === 'Production Orders') {
             loadProductionOrders()
         }
-    }, [page])
+    }, [page, loadProductionOrders])
 
-
-
-    // Open the form for adding or editing
     const openForm = (type, record = null) => {
         setFormType(type)
 
@@ -118,8 +132,7 @@ function App({ currentUser, onLogout }) {
         setShowForm(true)
     }
 
-    // Update form values as the user types
-    const handleInputChange = (event) => {
+    const handleInputChange = event => {
         const { name, value } = event.target
 
         setFormData(previous => ({
@@ -128,8 +141,7 @@ function App({ currentUser, onLogout }) {
         }))
     }
 
-    // Save a new record or update an existing one
-    const handleSave = async (event) => {
+    const handleSave = async event => {
         event.preventDefault()
 
         try {
@@ -160,7 +172,6 @@ function App({ currentUser, onLogout }) {
         }
     }
 
-    // Deactivate a warehouse or category
     const handleDeactivate = async (type, id) => {
         const confirmed = window.confirm(
             'Are you sure you want to deactivate this record?'
@@ -174,7 +185,6 @@ function App({ currentUser, onLogout }) {
                 : '/item-categories'
 
             await api.patch(`${endpoint}/${id}/deactivate`)
-
             await loadData()
         } catch (error) {
             console.error('Unable to deactivate record:', error)
@@ -186,29 +196,56 @@ function App({ currentUser, onLogout }) {
         }
     }
 
-    // Calculate active records
     const activeWarehouses = warehouses.filter(w => w.isActive).length
     const activeCategories = categories.filter(c => c.isActive).length
 
-    // Change page and clear previous form messages
-    const handlePageChange = (newPage) => {
+    // Page navigation and access control.
+    const handlePageChange = newPage => {
+        if (!availablePages.includes(newPage)) {
+            console.warn('Unknown page:', newPage)
+            return
+        }
+
+        // Dashboard is always accessible.
+        if (newPage === 'Dashboard') {
+            setPage(newPage)
+            setMessage('')
+            return
+        }
+
+        // IMPORTANT:
+        // canAccessPage expects (page, user), not (user, permission).
+        if (!canAccessPage(newPage, currentUser)) {
+            console.warn('Access denied to page:', newPage)
+            setPage('Dashboard')
+            setMessage('')
+            return
+        }
+
         setPage(newPage)
         setMessage('')
     }
 
+    // Validate the selected page on render as well.
+    const visiblePage =
+        page === 'Dashboard' ||
+        canAccessPage(page, currentUser)
+            ? page
+            : 'Dashboard'
+
     return (
         <>
             <MainLayout
-                page={page}
+                page={visiblePage}
                 setPage={handlePageChange}
                 apiError={apiError}
                 loading={loading}
                 currentUser={currentUser}
                 onLogout={onLogout}
             >
-                {/* DASHBOARD */}
-                {page === 'Dashboard' && (
+                {visiblePage === 'Dashboard' && (
                     <Dashboard
+                        currentUser={currentUser}
                         warehouses={warehouses}
                         activeWarehouses={activeWarehouses}
                         activeCategories={activeCategories}
@@ -217,12 +254,11 @@ function App({ currentUser, onLogout }) {
                         productionDashboard={productionDashboard}
                         productionLoading={productionLoading}
                         productionError={productionError}
-                        setPage={setPage}
+                        setPage={handlePageChange}
                     />
                 )}
 
-                {/* WAREHOUSE MANAGEMENT */}
-                {page === 'Warehouses' && (
+                {visiblePage === 'Warehouses' && (
                     <ManagementPage
                         title="Warehouse management"
                         subtitle="Manage your registered warehouse facilities."
@@ -230,13 +266,12 @@ function App({ currentUser, onLogout }) {
                         type="warehouse"
                         loading={loading}
                         onAdd={() => openForm('warehouse')}
-                        onEdit={(record) => openForm('warehouse', record)}
-                        onDeactivate={(id) => handleDeactivate('warehouse', id)}
+                        onEdit={record => openForm('warehouse', record)}
+                        onDeactivate={id => handleDeactivate('warehouse', id)}
                     />
                 )}
 
-                {/* ITEM CATEGORIES */}
-                {page === 'Item Categories' && (
+                {visiblePage === 'Item Categories' && (
                     <ManagementPage
                         title="Item categories"
                         subtitle="Organize materials and products into categories."
@@ -244,13 +279,12 @@ function App({ currentUser, onLogout }) {
                         type="category"
                         loading={loading}
                         onAdd={() => openForm('category')}
-                        onEdit={(record) => openForm('category', record)}
-                        onDeactivate={(id) => handleDeactivate('category', id)}
+                        onEdit={record => openForm('category', record)}
+                        onDeactivate={id => handleDeactivate('category', id)}
                     />
                 )}
 
-                {/* PRODUCTION ORDERS */}
-                {page === 'Production Orders' && (
+                {visiblePage === 'Production Orders' && (
                     <ProductionOrdersPage
                         productionOrders={productionOrders}
                         loading={ordersLoading}
@@ -259,61 +293,83 @@ function App({ currentUser, onLogout }) {
                     />
                 )}
 
-                {/* INVENTORY MODULES */}
-                {page === 'Stock Transfers' && <StockTransfersPage />}
-                {page === 'Storage Locations' && <StorageLocationsPage />}
-                {page === 'Items & Materials' && <ItemsPage />}
-                {page === 'Stock Overview' && <InventoryOverviewPage />}
-                {page === 'Stock Adjustments' && <StockAdjustmentsPage />}
-                {page === 'Goods Receipts' && <GoodsReceiptsPage />}
-                {page === 'Putaway Tasks' && <PutawayTasksPage />}
-                {page === 'Stock Counts' && <StockCountsPage />}
-                {page === 'Replenishment' && <ReplenishmentPage />}
+                {visiblePage === 'Stock Transfers' && (
+                    <StockTransfersPage />
+                )}
 
-                {/* MANUFACTURING MODULES */}
-                {page === 'Bill of Materials' && <BillOfMaterialsPage />}
-                {page === 'Purchase Orders' && <PurchaseOrdersPage />}
-                {page === 'Quality Inspections' && <QualityInspections />}
+                {visiblePage === 'Storage Locations' && (
+                    <StorageLocationsPage />
+                )}
 
-                {/* CUSTOMER MODULES */}
-                {page === 'Customers' && <CustomersPage />}
-                {page === 'Supplier Management' && <SuppliersPage />}
+                {visiblePage === 'Items & Materials' && (
+                    <ItemsPage />
+                )}
 
-                {/* CONFIGURATION MODULES */}
-                {page === 'Units of Measure' && <UnitsOfMeasurePage />}
-                {page === 'Quality Parameters' && <QualityParametersPage />}
+                {visiblePage === 'Stock Overview' && (
+                    <InventoryOverviewPage />
+                )}
 
-                {/* REPORTS */}
-                {page === 'Reports & Analytics' && <ReportsPage />}
+                {visiblePage === 'Stock Adjustments' && (
+                    <StockAdjustmentsPage />
+                )}
 
-                {/* ADMINISTRATION */}
-                {page === 'User Management' && <UsersPage />}
+                {visiblePage === 'Goods Receipts' && (
+                    <GoodsReceiptsPage />
+                )}
 
-                {/* MODULE NOT YET AVAILABLE */}
-                {![
-                    'Dashboard',
-                    'Warehouses',
-                    'Item Categories',
-                    'Production Orders',
-                    'Stock Overview',
-                    'Stock Transfers',
-                    'Storage Locations',
-                    'Items & Materials',
-                    'Bill of Materials',
-                    'Purchase Orders',
-                    'Quality Inspections',
-                    'Stock Adjustments',
-                    'Goods Receipts',
-                    'Putaway Tasks',
-                    'Stock Counts',
-                    'Customers',
-                    'Reports & Analytics',
-                    'Replenishment',
-                    'Supplier Management',
-                    'Units of Measure',
-                    'Quality Parameters',
-                    'User Management'
-                ].includes(page) && (
+                {visiblePage === 'Putaway Tasks' && (
+                    <PutawayTasksPage />
+                )}
+
+                {visiblePage === 'Stock Counts' && (
+                    <StockCountsPage />
+                )}
+
+                {visiblePage === 'Replenishment' && (
+                    <ReplenishmentPage />
+                )}
+
+                {visiblePage === 'Bill of Materials' && (
+                    <BillOfMaterialsPage />
+                )}
+
+                {visiblePage === 'Purchase Orders' && (
+                    <PurchaseOrdersPage />
+                )}
+
+                {visiblePage === 'Quality Inspections' && (
+                    <QualityInspections />
+                )}
+
+                {visiblePage === 'Customers' && (
+                    <CustomersPage />
+                )}
+
+                {visiblePage === 'Supplier Management' && (
+                    <SuppliersPage />
+                )}
+
+                {visiblePage === 'Units of Measure' && (
+                    <UnitsOfMeasurePage />
+                )}
+
+                {visiblePage === 'Quality Parameters' && (
+                    <QualityParametersPage />
+                )}
+
+                {visiblePage === 'Reports & Analytics' && (
+                    <ReportsPage />
+                )}
+
+                {visiblePage === 'User Management' && (
+                    <UsersPage />
+                )}
+
+                {visiblePage === 'User List' && (
+                    <UsersListPage />
+                )}
+
+                {!availablePages.includes(visiblePage) && (
                     <section className="intro">
                         <div>
                             <div className="eyebrow">
@@ -321,7 +377,7 @@ function App({ currentUser, onLogout }) {
                                 MODULE NOT YET AVAILABLE
                             </div>
 
-                            <h1>{page}</h1>
+                            <h1>{visiblePage}</h1>
 
                             <p>
                                 This module will be connected as we build
@@ -330,7 +386,7 @@ function App({ currentUser, onLogout }) {
 
                             <button
                                 className="primary-button"
-                                onClick={() => setPage('Dashboard')}
+                                onClick={() => handlePageChange('Dashboard')}
                             >
                                 Return to dashboard
                             </button>

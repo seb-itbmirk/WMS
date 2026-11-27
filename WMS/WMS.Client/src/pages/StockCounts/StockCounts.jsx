@@ -1,6 +1,6 @@
-
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../services/api'
+import './stockcounts.css'
 
 function valueOf(obj, camel, pascal) {
     return obj?.[camel] ?? obj?.[pascal]
@@ -19,7 +19,7 @@ function dateValue(value) {
 }
 
 function statusClass(status) {
-    return String(status || '').toLowerCase().replaceAll(' ', '-')
+    return String(status || '').toLowerCase().replaceAll(' ', '-').replaceAll('_', '-')
 }
 
 export default function StockCountsPage() {
@@ -208,8 +208,8 @@ export default function StockCountsPage() {
         setBins([])
         setShowLineModal(true)
 
-        const warehouseId = valueOf(details, 'warehouseId', 'WarehouseId')
-        if (warehouseId) loadZones(warehouseId)
+        const currentWarehouseId = valueOf(details, 'warehouseId', 'WarehouseId')
+        if (currentWarehouseId) loadZones(currentWarehouseId)
     }
 
     async function addLine(event) {
@@ -452,31 +452,38 @@ export default function StockCountsPage() {
             </div>
 
             <div className="stock-counts-panel">
-                <div className="stock-counts-toolbar">
-                    <input
-                        placeholder="Search count number or warehouse..."
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                    />
+                <div className="stock-counts-table-header">
+                    <div className="stock-counts-table-title">
+                        <h2>Stock Count Records</h2>
+                        <p>Review and manage physical inventory counts.</p>
+                    </div>
 
-                    <select
-                        value={statusFilter}
-                        onChange={e => setStatusFilter(e.target.value)}
-                    >
-                        <option value="ALL">All Statuses</option>
-                        <option value="OPEN">Open</option>
-                        <option value="IN_PROGRESS">In Progress</option>
-                        <option value="COMPLETED">Completed</option>
-                        <option value="POSTED">Posted</option>
-                    </select>
+                    <div className="stock-counts-toolbar">
+                        <input
+                            placeholder="Search count number or warehouse..."
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                        />
 
-                    <button
-                        className="stock-counts-secondary-btn"
-                        onClick={loadPage}
-                        disabled={loading}
-                    >
-                        Refresh
-                    </button>
+                        <select
+                            value={statusFilter}
+                            onChange={e => setStatusFilter(e.target.value)}
+                        >
+                            <option value="ALL">All Statuses</option>
+                            <option value="OPEN">Open</option>
+                            <option value="IN_PROGRESS">In Progress</option>
+                            <option value="COMPLETED">Completed</option>
+                            <option value="POSTED">Posted</option>
+                        </select>
+
+                        <button
+                            className="stock-counts-secondary-btn"
+                            onClick={loadPage}
+                            disabled={loading}
+                        >
+                            {loading ? 'Refreshing...' : 'Refresh'}
+                        </button>
+                    </div>
                 </div>
 
                 <div className="stock-counts-table-wrap">

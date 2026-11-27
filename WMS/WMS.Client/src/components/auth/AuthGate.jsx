@@ -1,57 +1,106 @@
-import { useEffect, useState } from 'react'
+
+import { useCallback, useEffect, useState } from 'react'
 import App from '../../App'
 import api from '../../services/api'
 import LoginPage from '../../pages/Authentication/LoginPage'
+
+const TOKEN_KEY = 'wms_access_token'
+const USER_KEY = 'wms_user'
 
 function AuthGate() {
     const [currentUser, setCurrentUser] = useState(null)
     const [checkingAuth, setCheckingAuth] = useState(true)
 
+    const clearSession = useCallback(() => {
+        localStorage.removeItem(TOKEN_KEY)
+        localStorage.removeItem(USER_KEY)
+        setCurrentUser(null)
+    }, [])
+
+    const loadCurrentUser = useCallback(async () => {
+        const response = await api.get('/auth/me')
+
+        if (!response.data) {
+            throw new Error('Unable to retrieve the user profile.')
+        }
+
+        localStorage.setItem(USER_KEY, JSON.stringify(response.data))
+        setCurrentUser(response.data)
+
+        return response.data
+    }, [])
+
+    // Restore the session when the application starts.
     useEffect(() => {
-        const verifySession = async () => {
-            const token = localStorage.getItem('wms_access_token')
+        let active = true
+
+        const initializeAuth = async () => {
+            const token = localStorage.getItem(TOKEN_KEY)
 
             if (!token) {
-                setCheckingAuth(false)
+                if (active) setCheckingAuth(false)
                 return
             }
 
             try {
                 const response = await api.get('/auth/me')
+
+                if (!active) return
+
+                localStorage.setItem(USER_KEY, JSON.stringify(response.data))
                 setCurrentUser(response.data)
             } catch (error) {
-                localStorage.removeItem('wms_access_token')
-                localStorage.removeItem('wms_user')
-                setCurrentUser(null)
+                console.error('Authentication session expired:', error)
+
+                localStorage.removeItem(TOKEN_KEY)
+                localStorage.removeItem(USER_KEY)
+
+                if (active) setCurrentUser(null)
             } finally {
-                setCheckingAuth(false)
+                if (active) setCheckingAuth(false)
             }
         }
 
-        verifySession()
+        initializeAuth()
+
+        return () => {
+            active = false
+        }
     }, [])
 
-    const handleLogin = (userData) => {
-        const token = userData.accessToken ?? userData.AccessToken
+    // Called by LoginPage after successful credential validation.
+    const handleLogin = async (loginResponse) => {
+        const token =
+            loginResponse?.accessToken ??
+            loginResponse?.AccessToken
 
         if (!token) {
-            console.error('Login response does not contain an access token.')
-            return
+            throw new Error('The login response did not contain an access token.')
         }
 
-        localStorage.setItem('wms_access_token', token)
-        localStorage.setItem('wms_user', JSON.stringify(userData))
-        setCurrentUser(userData)
+        localStorage.setItem(TOKEN_KEY, token)
+
+        try {
+            await loadCurrentUser()
+        } catch (error) {
+            clearSession()
+            throw new Error(
+                'Login succeeded, but the user profile could not be loaded. Please try again.'
+            )
+        }
     }
 
+    // End the current session.
     const handleLogout = () => {
-        localStorage.removeItem('wms_access_token')
-        localStorage.removeItem('wms_user')
-        setCurrentUser(null)
+        clearSession()
     }
 
     if (checkingAuth) {
-        return <div className="auth-loading">Loading WMS...</div>
+        return (
+            <div className="auth-loading">
+                <span>Loading WMS...</span>
+            </div>
+        )
     }
 
     if (!currentUser) {

@@ -136,6 +136,129 @@ public class UsersController : ControllerBase
         return Ok(assignableRoles);
     }
 
+
+    // GET: api/users
+    // Returns users visible to the current administrator.
+    [HttpGet]
+    [Authorize(Policy = "Permission:users.view")]
+    public async Task<IActionResult> GetUsers()
+    {
+        var (administrator, error) =
+            await GetCurrentAdministrator();
+
+        if (administrator == null)
+        {
+            return Forbid();
+        }
+
+        var isSuperAdmin = IsSuperAdmin(administrator);
+
+        var usersQuery = _context.AppUsers
+            .AsNoTracking()
+            .AsQueryable();
+
+        // System Admin can only view users assigned to
+        // warehouses that the administrator can access.
+        if (!isSuperAdmin)
+        {
+            var administratorWarehouseIds =
+                administrator.Warehouses
+                    .Select(w => w.WarehouseId)
+                    .ToList();
+
+            usersQuery = usersQuery.Where(u =>
+                u.Warehouses.Any(w =>
+                    administratorWarehouseIds.Contains(
+                        w.WarehouseId)));
+        }
+
+        var users = await usersQuery
+            .OrderBy(u => u.FullName)
+            .Select(u => new
+            {
+                u.UserId,
+                u.EmployeeCode,
+                u.FullName,
+                u.Username,
+                u.Email,
+                u.IsActive,
+                u.CreatedAt,
+
+                Roles = u.Roles
+                    .Select(r => new
+                    {
+                        r.RoleId,
+                        r.RoleName
+                    })
+                    .ToList(),
+
+                Warehouses = u.Warehouses
+                    .Select(w => new
+                    {
+                        w.WarehouseId,
+                        w.WarehouseCode,
+                        w.WarehouseName
+                    })
+                    .ToList()
+            })
+            .ToListAsync();
+
+        return Ok(users);
+    }
+
+
+    // PATCH: api/users/{id}/status
+    // Activate or deactivate a user account.
+    [HttpPatch("{id:long}/status")]
+    [Authorize(Policy = "Permission:users.disable")]
+    public async Task<IActionResult> ToggleUserStatus(long id)
+    {
+        var user = await _context.AppUsers
+            .Include(u => u.Roles)
+            .FirstOrDefaultAsync(u => u.UserId == id);
+
+        if (user == null)
+        {
+            return NotFound(new
+            {
+                message = "User not found."
+            });
+        }
+
+        var userIdClaim = User.FindFirstValue(
+            ClaimTypes.NameIdentifier);
+
+        if (!long.TryParse(userIdClaim, out var currentUserId))
+        {
+            return Unauthorized();
+        }
+
+        // Prevent the currently logged-in user from
+        // deactivating their own account.
+        if (currentUserId == id)
+        {
+            return BadRequest(new
+            {
+                message = "You cannot deactivate your own account."
+            });
+        }
+
+        user.IsActive = !user.IsActive;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            userId = user.UserId,
+            fullName = user.FullName,
+            isActive = user.IsActive,
+            message = user.IsActive
+                ? "User account activated successfully."
+                : "User account deactivated successfully."
+        });
+    }
+
+
     // POST: api/users
     // Only authorized higher-level administrators can create accounts.
     [HttpPost]

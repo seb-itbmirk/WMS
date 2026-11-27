@@ -20,13 +20,18 @@ function LoginPage({ onLogin }) {
             ...previous,
             [name]: value
         }))
+
+        if (error) setError('')
     }
 
     const handleSubmit = async (event) => {
         event.preventDefault()
         setError('')
 
-        if (!formData.username.trim() || !formData.password) {
+        const username = formData.username.trim()
+        const password = formData.password
+
+        if (!username || !password) {
             setError('Please enter your username and password.')
             return
         }
@@ -35,24 +40,37 @@ function LoginPage({ onLogin }) {
             setLoading(true)
 
             const response = await api.post('/auth/login', {
-                username: formData.username.trim(),
-                password: formData.password
+                username,
+                password
             })
 
-            const data = response.data
-
-            const accessToken = data.accessToken ?? data.AccessToken
+            const loginData = response.data
+            const accessToken =
+                loginData?.accessToken ??
+                loginData?.AccessToken
 
             if (!accessToken) {
-                throw new Error('The server did not return an access token.')
+                throw new Error(
+                    'Invalid login response. The server did not return an access token.'
+                )
             }
 
-            onLogin(data)
+            if (typeof onLogin !== 'function') {
+                throw new Error('Authentication handler is unavailable.')
+            }
+
+            // Wait until AuthGate finishes loading the user's profile.
+            await onLogin(loginData)
+
         } catch (err) {
             console.error('Login failed:', err)
 
+            const responseData = err.response?.data
+
             setError(
-                err.response?.data?.message ||
+                responseData?.message ||
+                responseData?.Message ||
+                responseData?.error ||
                 err.message ||
                 'Unable to sign in. Please check your credentials.'
             )
@@ -131,14 +149,14 @@ function LoginPage({ onLogin }) {
                             <span>WELCOME BACK</span>
                             <h1>Sign in to your account</h1>
                             <p>
-                                Enter your account credentials to continue.
+                                Enter the credentials provided by your system administrator.
                             </p>
                         </div>
 
                         <form onSubmit={handleSubmit}>
 
                             {error && (
-                                <div className="login-error">
+                                <div className="login-error" role="alert">
                                     <span>!</span>
                                     {error}
                                 </div>
@@ -159,6 +177,7 @@ function LoginPage({ onLogin }) {
                                     autoComplete="username"
                                     autoFocus
                                     disabled={loading}
+                                    required
                                 />
                             </div>
 
@@ -177,13 +196,15 @@ function LoginPage({ onLogin }) {
                                         onChange={handleChange}
                                         autoComplete="current-password"
                                         disabled={loading}
+                                        required
                                     />
 
                                     <button
                                         type="button"
                                         className="password-toggle"
-                                        onClick={() => setShowPassword(!showPassword)}
+                                        onClick={() => setShowPassword(previous => !previous)}
                                         disabled={loading}
+                                        aria-label={showPassword ? 'Hide password' : 'Show password'}
                                     >
                                         {showPassword ? 'Hide' : 'Show'}
                                     </button>

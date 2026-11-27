@@ -54,10 +54,10 @@ const navigation = [
     {
         heading: 'ADMINISTRATION',
         links: [
-            { name: 'User Management', icon: '♙' }
+            { name: 'User Management', icon: '♙' },
+            { name: 'User List', icon: '☷' }
         ]
     }
-    
 ]
 
 export default navigation

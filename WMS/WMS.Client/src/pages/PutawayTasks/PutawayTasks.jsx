@@ -1,6 +1,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../services/api'
+import './putaway.css'
 
 function getValue(object, camelCase, pascalCase) {
     return object?.[camelCase] ?? object?.[pascalCase]
@@ -106,20 +107,17 @@ export default function PutawayTasksPage() {
                 )
                 const receivingBinId = getValue(line, 'receivingBinId', 'ReceivingBinId')
 
-                
-            const alreadyAssigned = tasks
-                .filter(task =>
-                    Number(getValue(task, 'receiptLineId', 'ReceiptLineId')) ===
-                        Number(receiptLineId) &&
-                    String(getValue(task, 'status', 'Status')).toUpperCase() !== 'CANCELLED'
-                )
-                .reduce((total, task) => {
-                    const quantity = Number(
-                        getValue(task, 'quantity', 'Quantity') || 0
+                const alreadyAssigned = tasks
+                    .filter(task =>
+                        Number(getValue(task, 'receiptLineId', 'ReceiptLineId')) ===
+                            Number(receiptLineId) &&
+                        String(getValue(task, 'status', 'Status')).toUpperCase() !== 'CANCELLED'
                     )
-                    return total + quantity
-                }, 0)
-
+                    .reduce((total, task) => {
+                        return total + Number(
+                            getValue(task, 'quantity', 'Quantity') || 0
+                        )
+                    }, 0)
 
                 const remainingQuantity = Math.max(
                     0,
@@ -242,17 +240,6 @@ export default function PutawayTasksPage() {
             setZones([])
             setBins([])
         }
-    }
-
-    async function handleWarehouseChange(value) {
-        setForm(previous => ({
-            ...previous,
-            warehouseId: value,
-            zoneId: '',
-            toBinId: ''
-        }))
-
-        await loadZones(value)
     }
 
     async function handleZoneChange(value) {
@@ -413,6 +400,7 @@ export default function PutawayTasksPage() {
                     <span>Total Tasks</span>
                     <strong>{tasks.length}</strong>
                 </div>
+
                 <div className="putaway-summary-card">
                     <span>Pending</span>
                     <strong>
@@ -421,6 +409,7 @@ export default function PutawayTasksPage() {
                         ).length}
                     </strong>
                 </div>
+
                 <div className="putaway-summary-card">
                     <span>Completed</span>
                     <strong>
@@ -431,33 +420,44 @@ export default function PutawayTasksPage() {
                 </div>
             </div>
 
+            {/* TABLE PANEL */}
             <div className="putaway-panel">
-                <div className="putaway-toolbar">
-                    <input
-                        type="text"
-                        placeholder="Search task, item, or batch..."
-                        value={search}
-                        onChange={event => setSearch(event.target.value)}
-                    />
 
-                    <select
-                        value={statusFilter}
-                        onChange={event => setStatusFilter(event.target.value)}
-                    >
-                        <option value="ALL">All Statuses</option>
-                        <option value="PENDING">Pending</option>
-                        <option value="COMPLETED">Completed</option>
-                    </select>
+                {/* TABLE HEADER AND FILTERS */}
+                <div className="putaway-table-header">
+                    <div className="putaway-table-title">
+                        <h2>Putaway Records</h2>
+                        <p>Review and manage inventory putaway tasks.</p>
+                    </div>
 
-                    <button
-                        className="putaway-secondary-btn"
-                        onClick={loadPage}
-                        disabled={loading}
-                    >
-                        Refresh
-                    </button>
+                    <div className="putaway-toolbar">
+                        <input
+                            type="text"
+                            placeholder="Search task, item, or batch..."
+                            value={search}
+                            onChange={event => setSearch(event.target.value)}
+                        />
+
+                        <select
+                            value={statusFilter}
+                            onChange={event => setStatusFilter(event.target.value)}
+                        >
+                            <option value="ALL">All Statuses</option>
+                            <option value="PENDING">Pending</option>
+                            <option value="COMPLETED">Completed</option>
+                        </select>
+
+                        <button
+                            className="putaway-secondary-btn"
+                            onClick={loadPage}
+                            disabled={loading}
+                        >
+                            Refresh
+                        </button>
+                    </div>
                 </div>
 
+                {/* TABLE */}
                 <div className="putaway-table-wrap">
                     <table className="putaway-table">
                         <thead>
@@ -494,6 +494,7 @@ export default function PutawayTasksPage() {
                                     return (
                                         <tr key={id}>
                                             <td>#{id}</td>
+
                                             <td>
                                                 <strong>
                                                     {getValue(task, 'itemCode', 'ItemCode') || '—'}
@@ -502,23 +503,29 @@ export default function PutawayTasksPage() {
                                                     {getValue(task, 'itemName', 'ItemName') || ''}
                                                 </small>
                                             </td>
+
                                             <td>
                                                 {getValue(task, 'batchCode', 'BatchCode') || '—'}
                                             </td>
+
                                             <td>
                                                 {getValue(task, 'fromBinCode', 'FromBinCode') || 'Receiving Bin'}
                                             </td>
+
                                             <td>
                                                 {getValue(task, 'toBinCode', 'ToBinCode') || '—'}
                                             </td>
+
                                             <td>
                                                 {formatNumber(getValue(task, 'quantity', 'Quantity'))}
                                             </td>
+
                                             <td>
                                                 <span className={`putaway-status ${statusClass(status)}`}>
                                                     {status}
                                                 </span>
                                             </td>
+
                                             <td>
                                                 {String(status).toUpperCase() === 'PENDING' ? (
                                                     <button
@@ -545,6 +552,7 @@ export default function PutawayTasksPage() {
                 </div>
             </div>
 
+            {/* CREATE PUTAWAY MODAL */}
             {showModal && (
                 <div className="putaway-modal-backdrop">
                     <div className="putaway-modal">
@@ -553,6 +561,7 @@ export default function PutawayTasksPage() {
                                 <span className="putaway-eyebrow">WAREHOUSE OPERATIONS</span>
                                 <h2>Create Putaway Task</h2>
                             </div>
+
                             <button
                                 className="putaway-close"
                                 onClick={() => setShowModal(false)}
@@ -574,6 +583,7 @@ export default function PutawayTasksPage() {
                                     required
                                 >
                                     <option value="">Select a receipt line</option>
+
                                     {receiptLines.map(line => (
                                         <option
                                             key={line.receiptLineId}
@@ -593,10 +603,12 @@ export default function PutawayTasksPage() {
                                                 {selectedReceiptLine.itemCode} — {selectedReceiptLine.itemName}
                                             </strong>
                                         </div>
+
                                         <div>
                                             <span>Batch</span>
                                             <strong>{selectedReceiptLine.batchCode}</strong>
                                         </div>
+
                                         <div>
                                             <span>Warehouse</span>
                                             <strong>
@@ -604,6 +616,7 @@ export default function PutawayTasksPage() {
                                                     getWarehouseName(selectedReceiptLine.warehouseId)}
                                             </strong>
                                         </div>
+
                                         <div>
                                             <span>Remaining Quantity</span>
                                             <strong>
@@ -662,6 +675,7 @@ export default function PutawayTasksPage() {
                                     required
                                 >
                                     <option value="">Select zone</option>
+
                                     {zones.map(zone => {
                                         const id = getValue(zone, 'zoneId', 'ZoneId')
                                         const code = getValue(zone, 'zoneCode', 'ZoneCode')
@@ -688,6 +702,7 @@ export default function PutawayTasksPage() {
                                     required
                                 >
                                     <option value="">Select destination bin</option>
+
                                     {bins.map(bin => {
                                         const id = getValue(bin, 'binId', 'BinId')
                                         const code = getValue(bin, 'binCode', 'BinCode')
@@ -722,6 +737,7 @@ export default function PutawayTasksPage() {
                                     <option value="">
                                         Use receipt's receiving bin automatically
                                     </option>
+
                                     {bins.map(bin => {
                                         const id = getValue(bin, 'binId', 'BinId')
                                         const code = getValue(bin, 'binCode', 'BinCode')

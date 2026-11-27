@@ -257,8 +257,8 @@ function UsersPage() {
                     </div>
 
                     <div className="users-field">
-                        <label>Temporary Password *</label>
-                        <input
+                        <label>Password *</label>
+                        <input 
                             type="password"
                             name="password"
                             value={form.password}

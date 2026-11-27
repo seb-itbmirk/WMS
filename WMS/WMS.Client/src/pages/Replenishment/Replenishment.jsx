@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from 'react'
 import api from '../../services/api'
 import './replenishment.css'
@@ -309,7 +308,6 @@ function ReplenishmentPage() {
 
                 <div className="rp-table-wrapper">
                     <table className="rp-table">
-
                         <thead>
                             <tr>
                                 <th>Item Code</th>
