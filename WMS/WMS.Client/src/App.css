@@ -5355,3 +5355,42 @@
         width: 100%;
     }
 }
+
+.assigned-warehouse {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 18px;
+    padding: 12px 16px;
+    background: #f1f5f1;
+    border: 1px solid #e1e9e2;
+    border-radius: 8px;
+}
+
+.assigned-warehouse-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    background: #dce8dd;
+    color: #365c43;
+    border-radius: 7px;
+    font-size: 17px;
+}
+
+.assigned-warehouse > span:last-child {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    color: #78847d;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+}
+
+.assigned-warehouse strong {
+    color: #26352f;
+    font-size: 13px;
+    letter-spacing: 0;
+}

@@ -31,12 +31,14 @@ import UnitsOfMeasurePage from './pages/UnitsOfMeasure/UnitsOfMeasure'
 import QualityParametersPage from './pages/QualityParameters/QualityParameters'
 import UsersPage from './pages/Users/UsersPage'
 import UsersListPage from './pages/Users/UsersListPage'
+import ProductionReportsPage from './pages/Production/ProductionReportsPage'
 
 const availablePages = [
     'Dashboard',
     'Warehouses',
     'Item Categories',
     'Production Orders',
+    'Production Reports',
     'Stock Overview',
     'Stock Transfers',
     'Storage Locations',
@@ -367,6 +369,10 @@ function App({ currentUser, onLogout }) {
 
                 {visiblePage === 'User List' && (
                     <UsersListPage />
+                )}
+
+                {visiblePage === 'Production Reports' && (
+                    <ProductionReportsPage />
                 )}
 
                 {!availablePages.includes(visiblePage) && (

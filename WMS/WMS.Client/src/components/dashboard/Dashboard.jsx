@@ -5,97 +5,136 @@ function getUserRoles(currentUser) {
     return roles.map(role =>
         typeof role === 'string'
             ? role.toLowerCase()
-            : (role.roleName ?? role.RoleName ?? role.name ?? role.Name ?? '').toLowerCase()
+            : (
+                role.roleName ??
+                role.RoleName ??
+                role.name ??
+                role.Name ??
+                ''
+            ).toLowerCase()
     )
 }
 
-function getDashboardProfile(currentUser) {
+function getDashboardProfile(currentUser, warehouses = []) {
     const roles = getUserRoles(currentUser)
+    const isSuperAdmin = roles.includes('super admin')
 
-    if (roles.includes('super admin')) {
+    // Super Admin has global access and uses CORE WMS as the heading.
+    // Other users see their assigned warehouse name when available.
+    const assignedWarehouse = isSuperAdmin
+        ? null
+        : warehouses[0] ?? null
+
+    const dashboardTitle = isSuperAdmin
+        ? 'CORE WMS'
+        : assignedWarehouse?.warehouseName || 'Warehouse Operations'
+
+    if (isSuperAdmin) {
         return {
-            title: <>Warehouse<br />control center.</>,
+            title: dashboardTitle,
             eyebrow: 'SYSTEM OVERVIEW',
             description: 'Monitor warehouse facilities, inventory, and manufacturing operations across the system.',
             showSystemHealth: true,
             showFacilityManagement: true,
-            showProduction: true
+            showProduction: true,
+            warehouseName: null
         }
     }
 
     if (roles.includes('system admin')) {
         return {
-            title: <>Organization<br />overview.</>,
+            title: dashboardTitle,
             eyebrow: 'ADMINISTRATION OVERVIEW',
-            description: 'Monitor organization facilities and the operational status of your WMS.',
+            description: assignedWarehouse
+                ? `Monitor organization facilities and operations, including ${assignedWarehouse.warehouseName}.`
+                : 'Monitor organization facilities and the operational status of your WMS.',
             showSystemHealth: true,
             showFacilityManagement: true,
-            showProduction: true
+            showProduction: true,
+            warehouseName: assignedWarehouse?.warehouseName ?? null
         }
     }
 
     if (roles.includes('warehouse manager')) {
         return {
-            title: <>Warehouse<br />management.</>,
-            eyebrow: 'WAREHOUSE OVERVIEW',
-            description: 'Monitor your assigned warehouse facilities and their manufacturing activity.',
+            title: dashboardTitle,
+            eyebrow: 'WAREHOUSE MANAGEMENT',
+            description: assignedWarehouse
+                ? `Manage and monitor ${assignedWarehouse.warehouseName}, including its inventory and manufacturing operations.`
+                : 'Monitor your assigned warehouse facilities and their manufacturing activity.',
             showSystemHealth: false,
             showFacilityManagement: true,
-            showProduction: true
+            showProduction: true,
+            warehouseName: assignedWarehouse?.warehouseName ?? null
         }
     }
 
     if (roles.includes('warehouse supervisor')) {
         return {
-            title: <>Warehouse<br />operations.</>,
+            title: dashboardTitle,
             eyebrow: 'OPERATIONS OVERVIEW',
-            description: 'Review your assigned facilities and monitor ongoing production activity.',
+            description: assignedWarehouse
+                ? `Review and monitor daily warehouse operations at ${assignedWarehouse.warehouseName}.`
+                : 'Review your assigned facilities and monitor ongoing production activity.',
             showSystemHealth: false,
             showFacilityManagement: true,
-            showProduction: true
+            showProduction: true,
+            warehouseName: assignedWarehouse?.warehouseName ?? null
         }
     }
 
     if (roles.includes('inventory controller')) {
         return {
-            title: <>Inventory<br />control center.</>,
+            title: dashboardTitle,
             eyebrow: 'INVENTORY OVERVIEW',
-            description: 'Review your assigned facilities and access the inventory modules available to your account.',
+            description: assignedWarehouse
+                ? `Manage and monitor inventory activities at ${assignedWarehouse.warehouseName}.`
+                : 'Review your assigned facilities and access the inventory modules available to your account.',
             showSystemHealth: false,
             showFacilityManagement: true,
-            showProduction: false
+            showProduction: false,
+            warehouseName: assignedWarehouse?.warehouseName ?? null
         }
     }
 
     if (roles.includes('quality inspector')) {
         return {
-            title: <>Quality<br />operations.</>,
+            title: dashboardTitle,
             eyebrow: 'QUALITY OVERVIEW',
-            description: 'Review your assigned facilities and access quality inspection activities.',
+            description: assignedWarehouse
+                ? `Review quality inspection activities at ${assignedWarehouse.warehouseName}.`
+                : 'Review your assigned facilities and access quality inspection activities.',
             showSystemHealth: false,
             showFacilityManagement: true,
-            showProduction: false
+            showProduction: false,
+            warehouseName: assignedWarehouse?.warehouseName ?? null
         }
     }
 
     if (roles.includes('auditor')) {
         return {
-            title: <>Warehouse<br />audit overview.</>,
+            title: dashboardTitle,
             eyebrow: 'AUDIT OVERVIEW',
-            description: 'Review available warehouse information and operational records.',
+            description: assignedWarehouse
+                ? `Review warehouse information and operational records for ${assignedWarehouse.warehouseName}.`
+                : 'Review available warehouse information and operational records.',
             showSystemHealth: false,
             showFacilityManagement: true,
-            showProduction: true
+            showProduction: true,
+            warehouseName: assignedWarehouse?.warehouseName ?? null
         }
     }
 
     return {
-        title: <>Warehouse<br />operations.</>,
+        title: dashboardTitle,
         eyebrow: 'OPERATIONS OVERVIEW',
-        description: 'Access the warehouse information and operational modules available to your account.',
+        description: assignedWarehouse
+            ? `Access warehouse information and operational modules for ${assignedWarehouse.warehouseName}.`
+            : 'Access the warehouse information and operational modules available to your account.',
         showSystemHealth: false,
         showFacilityManagement: true,
-        showProduction: true
+        showProduction: true,
+        warehouseName: assignedWarehouse?.warehouseName ?? null
     }
 }
 
@@ -111,10 +150,11 @@ function Dashboard({
     productionError,
     setPage
 }) {
-    const profile = getDashboardProfile(currentUser)
+    const profile = getDashboardProfile(currentUser, warehouses)
 
     return (
         <>
+            {/* INTRODUCTION */}
             <section className="intro">
                 <div>
                     <div className="eyebrow">
@@ -125,10 +165,24 @@ function Dashboard({
                     <h1>{profile.title}</h1>
 
                     <p>{profile.description}</p>
+
+                    {profile.warehouseName && (
+                        <div className="assigned-warehouse">
+                            <span className="assigned-warehouse-icon">
+                                ▤
+                            </span>
+
+                            <span>
+                                CURRENT FACILITY
+                                <strong>{profile.warehouseName}</strong>
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 <div className="date-panel">
                     <span>TODAY'S DATE</span>
+
                     <strong>
                         {new Date().toLocaleDateString('en-PH', {
                             day: '2-digit',
@@ -139,6 +193,7 @@ function Dashboard({
                 </div>
             </section>
 
+            {/* OPERATIONAL SUMMARY */}
             <section className="section-block">
                 <div className="section-title">
                     <div>
@@ -157,7 +212,9 @@ function Dashboard({
                             className="metric clickable-metric"
                             onClick={() => setPage('Warehouses')}
                         >
-                            <span className="metric-label">ACTIVE WAREHOUSES</span>
+                            <span className="metric-label">
+                                ACTIVE WAREHOUSES
+                            </span>
 
                             <div className="metric-value">
                                 {loading ? '—' : activeWarehouses}
@@ -169,7 +226,9 @@ function Dashboard({
                     )}
 
                     <div className="metric">
-                        <span className="metric-label">ITEM CATEGORIES</span>
+                        <span className="metric-label">
+                            ITEM CATEGORIES
+                        </span>
 
                         <div className="metric-value">
                             {loading ? '—' : activeCategories}
@@ -180,7 +239,9 @@ function Dashboard({
                     </div>
 
                     <div className="metric">
-                        <span className="metric-label">INVENTORY LOTS</span>
+                        <span className="metric-label">
+                            INVENTORY LOTS
+                        </span>
 
                         <div className="metric-value">—</div>
 
@@ -192,7 +253,9 @@ function Dashboard({
                             className="metric clickable-metric"
                             onClick={() => setPage('Production Orders')}
                         >
-                            <span className="metric-label">PRODUCTION ORDERS</span>
+                            <span className="metric-label">
+                                PRODUCTION ORDERS
+                            </span>
 
                             <div className="metric-value">
                                 {productionLoading
@@ -214,6 +277,7 @@ function Dashboard({
                 </div>
             </section>
 
+            {/* PRODUCTION STATUS */}
             {profile.showProduction && (
                 <section className="section-block">
                     <div className="section-title">
@@ -284,12 +348,16 @@ function Dashboard({
                 </section>
             )}
 
+            {/* LOWER DASHBOARD SECTIONS */}
             <section className="lower-section">
                 {profile.showFacilityManagement && (
                     <div className="panel facility-panel">
                         <div className="panel-heading">
                             <div>
-                                <span className="eyebrow">FACILITY MANAGEMENT</span>
+                                <span className="eyebrow">
+                                    FACILITY MANAGEMENT
+                                </span>
+
                                 <h3>Warehouse directory</h3>
                             </div>
 
@@ -312,19 +380,34 @@ function Dashboard({
                         ) : warehouses.length === 0 ? (
                             <div className="empty-content">
                                 <span className="empty-symbol">▤</span>
+
                                 <strong>No accessible warehouses</strong>
-                                <p>Warehouse records assigned to your account will appear here.</p>
+
+                                <p>
+                                    Warehouse records assigned to your account
+                                    will appear here.
+                                </p>
                             </div>
                         ) : (
                             <div className="warehouse-list">
                                 {warehouses.slice(0, 5).map(warehouse => (
-                                    <div className="warehouse-row" key={warehouse.warehouseId}>
-                                        <span className="warehouse-symbol">W</span>
+                                    <div
+                                        className="warehouse-row"
+                                        key={warehouse.warehouseId}
+                                    >
+                                        <span className="warehouse-symbol">
+                                            W
+                                        </span>
 
                                         <div className="warehouse-details">
-                                            <strong>{warehouse.warehouseName}</strong>
+                                            <strong>
+                                                {warehouse.warehouseName}
+                                            </strong>
+
                                             <span>
-                                                {warehouse.warehouseCode} · {warehouse.city || 'Location not specified'}
+                                                {warehouse.warehouseCode} ·{' '}
+                                                {warehouse.city ||
+                                                    'Location not specified'}
                                             </span>
                                         </div>
 
@@ -335,7 +418,9 @@ function Dashboard({
                                                     : 'status-inactive'
                                             }
                                         >
-                                            {warehouse.isActive ? 'Active' : 'Inactive'}
+                                            {warehouse.isActive
+                                                ? 'Active'
+                                                : 'Inactive'}
                                         </span>
                                     </div>
                                 ))}
@@ -348,7 +433,10 @@ function Dashboard({
                     <div className="panel system-panel">
                         <div className="panel-heading">
                             <div>
-                                <span className="eyebrow">SYSTEM HEALTH</span>
+                                <span className="eyebrow">
+                                    SYSTEM HEALTH
+                                </span>
+
                                 <h3>Connection status</h3>
                             </div>
                         </div>
@@ -356,12 +444,21 @@ function Dashboard({
                         <div className="health-list">
                             <div className="health-row">
                                 <span>React frontend</span>
-                                <strong className="health-good">Running</strong>
+                                <strong className="health-good">
+                                    Running
+                                </strong>
                             </div>
 
                             <div className="health-row">
                                 <span>ASP.NET Core API</span>
-                                <strong className={apiError ? 'health-bad' : 'health-good'}>
+
+                                <strong
+                                    className={
+                                        apiError
+                                            ? 'health-bad'
+                                            : 'health-good'
+                                    }
+                                >
                                     {loading
                                         ? 'Checking'
                                         : apiError
@@ -372,7 +469,14 @@ function Dashboard({
 
                             <div className="health-row">
                                 <span>PostgreSQL</span>
-                                <strong className={apiError ? 'health-bad' : 'health-good'}>
+
+                                <strong
+                                    className={
+                                        apiError
+                                            ? 'health-bad'
+                                            : 'health-good'
+                                    }
+                                >
                                     {loading
                                         ? 'Checking'
                                         : apiError
@@ -384,7 +488,8 @@ function Dashboard({
 
                         <div className="system-note">
                             <span>i</span>
-                            Database status is inferred from successful API requests.
+                            Database status is inferred from successful API
+                            requests.
                         </div>
                     </div>
                 )}

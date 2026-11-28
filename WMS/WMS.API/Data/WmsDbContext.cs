@@ -1245,44 +1245,71 @@ public partial class WmsDbContext : DbContext
                 .HasConstraintName("production_orders_warehouse_id_fkey");
         });
 
+
         modelBuilder.Entity<ProductionOutput>(entity =>
         {
-            entity.HasKey(e => e.OutputId).HasName("production_outputs_pkey");
+            entity.HasKey(e => e.OutputId)
+                .HasName("production_outputs_pkey");
 
             entity.ToTable("production_outputs");
 
             entity.Property(e => e.OutputId)
                 .UseIdentityAlwaysColumn()
                 .HasColumnName("output_id");
-            entity.Property(e => e.FinishedLotId).HasColumnName("finished_lot_id");
+
+            entity.Property(e => e.FinishedLotId)
+                .HasColumnName("finished_lot_id");
+
             entity.Property(e => e.ProducedQuantity)
                 .HasPrecision(18, 6)
                 .HasColumnName("produced_quantity");
+
+            entity.Property(e => e.RejectedQuantity)
+                .HasPrecision(18, 6)
+                .HasDefaultValue(0)
+                .HasColumnName("rejected_quantity");
+
             entity.Property(e => e.ProductionDate)
                 .HasDefaultValueSql("now()")
                 .HasColumnName("production_date");
-            entity.Property(e => e.ProductionOrderId).HasColumnName("production_order_id");
+
+            entity.Property(e => e.ProductionOrderId)
+                .HasColumnName("production_order_id");
+
             entity.Property(e => e.QualityStatus)
                 .HasMaxLength(20)
                 .HasDefaultValueSql("'PENDING'::character varying")
                 .HasColumnName("quality_status");
-            entity.Property(e => e.UomId).HasColumnName("uom_id");
 
-            entity.HasOne(d => d.FinishedLot).WithMany(p => p.ProductionOutputs)
+            entity.Property(e => e.IsPosted)
+                .HasDefaultValue(false)
+                .HasColumnName("is_posted");
+
+            entity.Property(e => e.Remarks)
+                .HasColumnName("remarks");
+
+            entity.Property(e => e.UomId)
+                .HasColumnName("uom_id");
+
+            entity.HasOne(d => d.FinishedLot)
+                .WithMany(p => p.ProductionOutputs)
                 .HasForeignKey(d => d.FinishedLotId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("production_outputs_finished_lot_id_fkey");
 
-            entity.HasOne(d => d.ProductionOrder).WithMany(p => p.ProductionOutputs)
+            entity.HasOne(d => d.ProductionOrder)
+                .WithMany(p => p.ProductionOutputs)
                 .HasForeignKey(d => d.ProductionOrderId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("production_outputs_production_order_id_fkey");
 
-            entity.HasOne(d => d.Uom).WithMany(p => p.ProductionOutputs)
+            entity.HasOne(d => d.Uom)
+                .WithMany(p => p.ProductionOutputs)
                 .HasForeignKey(d => d.UomId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("production_outputs_uom_id_fkey");
         });
+
 
         modelBuilder.Entity<ProductionWaste>(entity =>
         {

@@ -27,7 +27,8 @@ const navigation = [
             { name: 'Production Orders', icon: '⚙' },
             { name: 'Bill of Materials', icon: '◫' },
             { name: 'Purchase Orders', icon: '№' },
-            { name: 'Quality Inspections', icon: '☑' }
+            { name: 'Quality Inspections', icon: '☑' },
+            { name: 'Production Reports', icon: '▤' }
         ]
     },
     {

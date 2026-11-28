@@ -7,8 +7,8 @@ using WMS.API.Models;
 
 namespace WMS.API.Controllers;
 
-[Route("api/warehouses/{warehouseId:long}/zones/{zoneId:long}/bins")]
 [ApiController]
+[Route("api/warehouses/{warehouseId:long}/zones/{zoneId:long}/bins")]
 public class StorageBinsController : ControllerBase
 {
     private readonly WmsDbContext _context;
@@ -27,7 +27,38 @@ public class StorageBinsController : ControllerBase
                 z.ZoneId == zoneId);
     }
 
+    // =========================================================
+    // GET ALL ACTIVE STORAGE BINS
+    // GET: api/storage-bins
+    // Used by Production Reporting and other modules
+    // =========================================================
+    [HttpGet("/api/storage-bins")]
+    public async Task<IActionResult> GetAllStorageBins()
+    {
+        var bins = await _context.StorageBins
+            .AsNoTracking()
+            .Include(b => b.Zone)
+            .Where(b => b.IsActive)
+            .OrderBy(b => b.BinCode)
+            .Select(b => new
+            {
+                b.BinId,
+                b.BinCode,
+                b.BinType,
+                b.IsActive,
+                b.ZoneId,
+                ZoneCode = b.Zone.ZoneCode,
+                WarehouseId = b.Zone.WarehouseId
+            })
+            .ToListAsync();
+
+        return Ok(bins);
+    }
+
+    // =========================================================
+    // GET BINS BY WAREHOUSE AND ZONE
     // GET: api/warehouses/1/zones/2/bins
+    // =========================================================
     [HttpGet]
     public async Task<IActionResult> GetBins(
         long warehouseId,
@@ -60,7 +91,10 @@ public class StorageBinsController : ControllerBase
         return Ok(bins);
     }
 
+    // =========================================================
+    // GET BIN BY ID
     // GET: api/warehouses/1/zones/2/bins/1
+    // =========================================================
     [HttpGet("{id:long}")]
     public async Task<IActionResult> GetBin(
         long warehouseId,
@@ -102,7 +136,10 @@ public class StorageBinsController : ControllerBase
         return Ok(bin);
     }
 
+    // =========================================================
+    // CREATE STORAGE BIN
     // POST: api/warehouses/1/zones/2/bins
+    // =========================================================
     [HttpPost]
     public async Task<IActionResult> CreateBin(
         long warehouseId,
@@ -217,7 +254,10 @@ public class StorageBinsController : ControllerBase
             bin);
     }
 
+    // =========================================================
+    // UPDATE STORAGE BIN
     // PUT: api/warehouses/1/zones/2/bins/1
+    // =========================================================
     [HttpPut("{id:long}")]
     public async Task<IActionResult> UpdateBin(
         long warehouseId,

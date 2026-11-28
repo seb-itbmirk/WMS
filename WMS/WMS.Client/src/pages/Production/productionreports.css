@@ -1,0 +1,758 @@
+
+/* =========================================================
+   PRODUCTION REPORTING
+========================================================= */
+
+.pr-page {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding-bottom: 30px;
+    min-width: 0;
+}
+
+/* =========================================================
+   PAGE HEADER
+========================================================= */
+
+.pr-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+}
+
+.pr-eyebrow {
+    display: block;
+    margin: 0 0 5px;
+    color: #64816d;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
+.pr-header h1 {
+    margin: 0;
+    color: #26352f;
+    font-size: 27px;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.pr-header p {
+    margin: 5px 0 0;
+    color: #78847d;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.pr-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+/* =========================================================
+   BUTTONS
+========================================================= */
+
+.pr-primary-btn,
+.pr-refresh-btn,
+.pr-cancel-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 38px;
+    padding: 0 15px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.pr-primary-btn {
+    border-color: #527a60;
+    background: #527a60;
+    color: #fff;
+}
+
+.pr-primary-btn:hover {
+    background: #42664e;
+}
+
+.pr-refresh-btn {
+    border-color: #dce5dd;
+    background: #f5f8f5;
+    color: #365c43;
+}
+
+.pr-refresh-btn:hover {
+    background: #edf4ee;
+}
+
+.pr-cancel-btn {
+    border-color: #dce3de;
+    background: #fff;
+    color: #536159;
+}
+
+.pr-cancel-btn:hover {
+    background: #f6f8f6;
+}
+
+.pr-primary-btn:disabled,
+.pr-refresh-btn:disabled,
+.pr-cancel-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* =========================================================
+   ALERTS
+========================================================= */
+
+.pr-alert {
+    padding: 12px 14px;
+    border: 1px solid #f0d5d5;
+    border-radius: 7px;
+    background: #fbebeb;
+    color: #984747;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+/* =========================================================
+   SUMMARY CARDS
+========================================================= */
+
+.pr-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.pr-summary-card {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 0;
+    padding: 18px;
+    border: 1px solid #e5eae6;
+    border-radius: 10px;
+    background: #fff;
+}
+
+.pr-summary-label {
+    color: #78847d;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.pr-summary-card strong {
+    margin: 0;
+    color: #26352f;
+    font-size: 25px;
+    font-weight: 700;
+    line-height: 1.3;
+    font-variant-numeric: tabular-nums;
+}
+
+.pr-summary-card small {
+    color: #89948d;
+    font-size: 10px;
+}
+
+.pr-value-green {
+    color: #347047 !important;
+}
+
+.pr-value-red {
+    color: #a34848 !important;
+}
+
+.pr-value-orange {
+    color: #986a1d !important;
+}
+
+/* =========================================================
+   MAIN PANEL
+========================================================= */
+
+.pr-panel {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid #e5eae6;
+    border-radius: 10px;
+    background: #fff;
+}
+
+/* =========================================================
+   TABLE TOOLBAR
+========================================================= */
+
+.pr-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 13px;
+    padding: 16px 20px;
+    border-bottom: 1px solid #edf0ed;
+    box-sizing: border-box;
+}
+
+.pr-search {
+    flex: 1;
+    min-width: 0;
+}
+
+.pr-toolbar input,
+.pr-toolbar select {
+    height: 40px;
+    box-sizing: border-box;
+    border: 1px solid #dce3de;
+    border-radius: 6px;
+    background: #fff;
+    color: #304238;
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+}
+
+.pr-toolbar input {
+    width: 100%;
+    max-width: 420px;
+    padding: 0 12px;
+}
+
+.pr-toolbar select {
+    width: 170px;
+    padding: 0 10px;
+    cursor: pointer;
+}
+
+.pr-toolbar input:focus,
+.pr-toolbar select:focus {
+    border-color: #648b72;
+}
+
+.pr-toolbar input::placeholder {
+    color: #a0aaa3;
+}
+
+/* =========================================================
+   TABLE
+========================================================= */
+
+.pr-table-wrapper {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+}
+
+.pr-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.pr-table thead {
+    position: static;
+}
+
+.pr-table th {
+    position: static;
+    padding: 12px;
+    border-bottom: 1px solid #e5eae6;
+    background: #f6f8f6;
+    color: #78847d;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.pr-table td {
+    padding: 13px 12px;
+    border-bottom: 1px solid #edf0ed;
+    color: #536159;
+    font-size: 12px;
+    vertical-align: middle;
+}
+
+.pr-table tbody tr:hover {
+    background: #fafcfb;
+}
+
+.pr-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.pr-table td strong {
+    color: #304238;
+    font-weight: 600;
+}
+
+.pr-number {
+    text-align: right !important;
+    font-variant-numeric: tabular-nums;
+}
+
+.pr-produced {
+    color: #347047 !important;
+    font-weight: 700;
+}
+
+.pr-rejected {
+    color: #a34848 !important;
+}
+
+.pr-empty {
+    padding: 35px 20px !important;
+    color: #78847d !important;
+    text-align: center;
+}
+
+/* =========================================================
+   STATUS
+========================================================= */
+
+.pr-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 9px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.pr-status-posted {
+    background: #e7f3e9;
+    color: #347047;
+}
+
+.pr-status-pending {
+    background: #fff2d9;
+    color: #986a1d;
+}
+
+.pr-status-draft {
+    background: #eaf0fa;
+    color: #496c9c;
+}
+
+.pr-status-rejected {
+    background: #f8e6e6;
+    color: #a34848;
+}
+
+/* =========================================================
+   MODAL BACKDROP
+========================================================= */
+
+.pr-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(25, 38, 30, 0.48);
+    backdrop-filter: blur(2px);
+    overflow-y: auto;
+    animation: pr-fade-in 0.18s ease;
+}
+
+@keyframes pr-fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+/* =========================================================
+   MODAL CONTAINER
+========================================================= */
+
+.pr-modal {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 650px;
+    max-height: calc(100vh - 48px);
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid #e5eae6;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 20px 60px rgba(24, 39, 29, 0.2);
+    animation: pr-modal-enter 0.2s ease;
+}
+
+@keyframes pr-modal-enter {
+    from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.99);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* =========================================================
+   MODAL HEADER
+========================================================= */
+
+.pr-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 15px;
+    padding: 22px 24px;
+    border-bottom: 1px solid #edf0ed;
+    background: #fff;
+}
+
+.pr-modal-header h2 {
+    margin: 0;
+    color: #26352f;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.pr-modal-header p {
+    margin: 5px 0 0;
+    color: #78847d;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.pr-modal-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid #e5eae6;
+    border-radius: 6px;
+    background: #fff;
+    color: #78847d;
+    font-size: 23px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.pr-modal-close:hover {
+    border-color: #d6dfd8;
+    background: #f5f8f5;
+    color: #304238;
+}
+
+.pr-modal-close:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* =========================================================
+   MODAL FORM
+========================================================= */
+
+.pr-modal-form {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.pr-modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 17px;
+    padding: 22px 24px;
+    overflow-y: auto;
+}
+
+/* =========================================================
+   FORM FIELDS
+========================================================= */
+
+.pr-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 0;
+}
+
+.pr-form-group label {
+    color: #536159;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.pr-required {
+    margin-left: 3px;
+    color: #bd5555;
+}
+
+.pr-form-group input,
+.pr-form-group select,
+.pr-form-group textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #dce3de;
+    border-radius: 6px;
+    background: #fff;
+    color: #304238;
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pr-form-group input,
+.pr-form-group select {
+    height: 40px;
+    padding: 0 11px;
+}
+
+.pr-form-group textarea {
+    min-height: 85px;
+    padding: 10px 11px;
+    resize: vertical;
+}
+
+.pr-form-group input:focus,
+.pr-form-group select:focus,
+.pr-form-group textarea:focus {
+    border-color: #648b72;
+    box-shadow: 0 0 0 3px rgba(100, 139, 114, 0.1);
+}
+
+.pr-form-group input::placeholder,
+.pr-form-group textarea::placeholder {
+    color: #a0aaa3;
+}
+
+.pr-form-group select {
+    cursor: pointer;
+}
+
+/* =========================================================
+   FORM ROW
+========================================================= */
+
+.pr-form-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+/* =========================================================
+   SELECTED ORDER INFORMATION
+========================================================= */
+
+.pr-order-info {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    padding: 15px;
+    border: 1px solid #e3ebe4;
+    border-radius: 8px;
+    background: #f4f8f4;
+}
+
+.pr-order-info > div {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+}
+
+.pr-order-info span {
+    color: #78847d;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.pr-order-info strong {
+    color: #304238;
+    font-size: 13px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+/* =========================================================
+   OUTPUT SUMMARY
+========================================================= */
+
+.pr-total-output {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    padding: 15px;
+    border: 1px solid #e5eae6;
+    border-radius: 8px;
+    background: #f8faf8;
+}
+
+.pr-total-output > div {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.pr-total-output span {
+    color: #78847d;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.pr-total-output strong {
+    color: #304238;
+    font-size: 16px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* =========================================================
+   MODAL FOOTER
+========================================================= */
+
+.pr-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 24px;
+    border-top: 1px solid #edf0ed;
+    background: #fafcfb;
+}
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+
+@media (max-width: 900px) {
+    .pr-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    .pr-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .pr-header h1 {
+        font-size: 23px;
+    }
+
+    .pr-header-actions {
+        width: 100%;
+    }
+
+    .pr-header-actions button {
+        flex: 1;
+    }
+
+    .pr-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .pr-summary-card {
+        padding: 14px;
+    }
+
+    .pr-summary-card strong {
+        font-size: 21px;
+    }
+
+    .pr-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 14px;
+    }
+
+    .pr-toolbar input {
+        max-width: none;
+    }
+
+    .pr-toolbar select {
+        width: 100%;
+    }
+
+    .pr-modal-backdrop {
+        align-items: flex-end;
+        padding: 0;
+    }
+
+    .pr-modal {
+        width: 100%;
+        max-width: none;
+        max-height: 92vh;
+        border-radius: 14px 14px 0 0;
+    }
+
+    .pr-modal-header {
+        padding: 18px;
+    }
+
+    .pr-modal-header h2 {
+        font-size: 18px;
+    }
+
+    .pr-modal-body {
+        gap: 15px;
+        padding: 18px;
+    }
+
+    .pr-form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .pr-order-info {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .pr-modal-footer {
+        padding: 14px 18px;
+    }
+
+    .pr-modal-footer button {
+        flex: 1;
+    }
+}
+
+@media (max-width: 380px) {
+    .pr-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .pr-total-output {
+        grid-template-columns: 1fr;
+    }
+}

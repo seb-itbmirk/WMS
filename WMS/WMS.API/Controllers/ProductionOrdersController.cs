@@ -155,6 +155,7 @@ namespace WMS.API.Controllers
         }
 
         // GET: api/production-orders/1/progress
+
         [HttpGet("{id:long}/progress")]
         public async Task<IActionResult> GetProgress(long id)
         {
@@ -181,14 +182,34 @@ namespace WMS.API.Controllers
                 });
             }
 
-            var producedQuantity = await _context.ProductionOutputs
+            var outputs = await _context.ProductionOutputs
+                .AsNoTracking()
                 .Where(o => o.ProductionOrderId == id)
-                .SumAsync(o => (decimal?)o.ProducedQuantity) ?? 0;
+                .GroupBy(o => o.ProductionOrderId)
+                .Select(g => new
+                {
+                    GoodQuantity = g.Sum(o => o.ProducedQuantity),
+                    RejectedQuantity = g.Sum(o => o.RejectedQuantity),
+                    PostedQuantity = g
+                        .Where(o => o.IsPosted)
+                        .Sum(o => o.ProducedQuantity),
+                    PendingQuantity = g
+                        .Where(o => !o.IsPosted)
+                        .Sum(o => o.ProducedQuantity)
+                })
+                .FirstOrDefaultAsync();
 
-            var remainingQuantity = order.PlannedQuantity - producedQuantity;
+            var producedQuantity = outputs?.GoodQuantity ?? 0;
+            var rejectedQuantity = outputs?.RejectedQuantity ?? 0;
+            var postedQuantity = outputs?.PostedQuantity ?? 0;
+            var pendingQuantity = outputs?.PendingQuantity ?? 0;
+
+            var remainingQuantity = Math.Max(
+                0,
+                order.PlannedQuantity - producedQuantity);
 
             var completionPercentage = order.PlannedQuantity > 0
-                ? (producedQuantity / order.PlannedQuantity) * 100
+                ? producedQuantity / order.PlannedQuantity * 100
                 : 0;
 
             return Ok(new
@@ -197,14 +218,28 @@ namespace WMS.API.Controllers
                 order.ProductionNumber,
                 order.FinishedItemCode,
                 order.FinishedItemName,
+
                 order.PlannedQuantity,
+
                 ProducedQuantity = producedQuantity,
-                RemainingQuantity = Math.Max(0, remainingQuantity),
-                CompletionPercentage = Math.Round(completionPercentage, 2),
+                RejectedQuantity = rejectedQuantity,
+
+                TotalReportedQuantity =
+                    producedQuantity + rejectedQuantity,
+
+                PostedQuantity = postedQuantity,
+                PendingInventoryQuantity = pendingQuantity,
+
+                RemainingQuantity = remainingQuantity,
+
+                CompletionPercentage = Math.Round(
+                    Math.Min(100, completionPercentage), 2),
+
                 order.UomCode,
                 order.ProductionStatus
             });
         }
+
 
         // GET: api/production-orders/1/materials-summary
         [HttpGet("{id:long}/materials-summary")]

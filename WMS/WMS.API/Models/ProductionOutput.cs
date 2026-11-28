@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
+﻿
 namespace WMS.API.Models;
 
 public partial class ProductionOutput
@@ -11,13 +9,21 @@ public partial class ProductionOutput
 
     public long FinishedLotId { get; set; }
 
+    // Accepted / good quantity
     public decimal ProducedQuantity { get; set; }
+
+    // Rejected quantity
+    public decimal RejectedQuantity { get; set; }
 
     public long UomId { get; set; }
 
     public DateTime ProductionDate { get; set; }
 
     public string QualityStatus { get; set; } = null!;
+
+    public bool IsPosted { get; set; }
+
+    public string? Remarks { get; set; }
 
     public virtual InventoryLot FinishedLot { get; set; } = null!;
 
